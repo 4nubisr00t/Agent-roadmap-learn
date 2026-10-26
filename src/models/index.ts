@@ -16,6 +16,7 @@ export interface Project {
   status: ProjectStatus;
   startDate: string; // ISO 8601 date string
   targetDate: string; // ISO 8601 date string
+  userId?: string; // Optional user ID for multi-tenant isolation
   createdAt: string; // ISO 8601 datetime string
   updatedAt: string; // ISO 8601 datetime string
 }

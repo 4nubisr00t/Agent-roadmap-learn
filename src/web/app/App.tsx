@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { marked } from 'marked';
 import { getItem, setItem, STORAGE_KEYS } from './utils/storage.js';
 import TagBadge from './components/TagBadge.js';
@@ -6,6 +6,7 @@ import TagFilter from './components/TagFilter.js';
 import TagSelector from './components/TagSelector.js';
 import DependencyViewsPanel from './components/DependencyViewsPanel.js';
 import TagManagerModal from './components/modals/TagManagerModal.js';
+import { AuthModal } from './components/modals/AuthModal.js';
 
 interface Project {
   id: string;
@@ -14,6 +15,7 @@ interface Project {
   projectType: string;
   status: string;
   updatedAt: string;
+  userId?: string;
 }
 
 interface ProjectSummary {
@@ -108,6 +110,8 @@ export interface AnnotationItem {
 }
 
 const App: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<{ id: string; username: string } | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [tasks, setTasks] = useState<{ task: Task; project: Project }[]>([]);
@@ -219,24 +223,56 @@ const App: React.FC = () => {
     setItem(STORAGE_KEYS.PROJECT_SIDEBAR_COLLAPSED, isProjectSidebarCollapsed);
   }, [isProjectSidebarCollapsed]);
 
-  useEffect(() => {
-    fetch('/api/projects')
-      .then(res => res.json())
-      .then(data => {
-        const list = (data as ProjectSummary[]) || [];
-        setProjects(list);
-        if (list.length > 0) {
-          setSelectedProject((prev) => {
-            if (prev && list.some(item => item.project?.id === prev)) {
-              return prev;
-            }
-            return list[0].project?.id || null;
-          });
-        } else {
-          setSelectedProject(null);
-        }
-      });
+  const loadProjects = useCallback(async () => {
+    try {
+      const res = await fetch('/api/projects');
+      if (!res.ok) return;
+      const list = (await res.json()) as ProjectSummary[];
+      setProjects(list || []);
+      if (list && list.length > 0) {
+        setSelectedProject((prev) => {
+          if (prev && list.some(item => item.project?.id === prev)) {
+            return prev;
+          }
+          return list[0].project?.id || null;
+        });
+      } else {
+        setSelectedProject(null);
+      }
+    } catch (err) {
+      console.error('Failed to load projects', err);
+    }
   }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('roadmap_auth_token');
+    if (token) {
+      fetch('/api/auth/me')
+        .then(res => {
+          if (res.ok) return res.json();
+          throw new Error('Invalid token');
+        })
+        .then(data => {
+          const user = data?.data || data?.user;
+          if (user) {
+            setCurrentUser(user);
+          }
+        })
+        .catch(() => {
+          localStorage.removeItem('roadmap_auth_token');
+          setCurrentUser(null);
+        });
+    }
+  }, []);
+
+  useEffect(() => {
+    loadProjects();
+  }, [currentUser, loadProjects]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('roadmap_auth_token');
+    setCurrentUser(null);
+  };
 
   useEffect(() => {
     fetch('/api/meta')
@@ -1226,6 +1262,32 @@ const App: React.FC = () => {
               className="pl-8 pr-3 py-1.5 text-sm bg-white/50 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all w-40 shadow-inner"
             />
           </div>
+          <div className="h-5 w-px bg-slate-300" />
+          {currentUser ? (
+            <div className="flex items-center gap-2 bg-white/90 border border-emerald-200/80 px-3 py-1.5 rounded-xl shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-xs font-black text-slate-800">
+                {currentUser.username}
+              </span>
+              <button
+                type="button"
+                onClick={handleLogout}
+                title="退出登录"
+                className="text-slate-400 hover:text-rose-600 text-xs font-medium ml-1 transition-colors px-1 py-0.5 rounded hover:bg-rose-50"
+              >
+                退出
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsAuthModalOpen(true)}
+              className="px-3.5 py-1.5 text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl shadow-sm shadow-emerald-500/20 active:scale-95 transition-all flex items-center gap-1.5"
+            >
+              <span>🔐</span>
+              <span>登录 / 注册</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -2145,6 +2207,14 @@ const App: React.FC = () => {
         projectId={selectedProject || ''}
         tags={tagsWithTaskCounts}
         onTagsChange={handleTagsChange}
+      />
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+        }}
       />
     </div>
   );

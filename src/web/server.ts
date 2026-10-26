@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import fs, { existsSync } from 'node:fs';
 import type { Server } from 'http';
 import { storage } from '../storage/index.js';
-import { DependencyViewService, TaskService, TagService } from '../services/index.js';
+import { DependencyViewService, TaskService, TagService, authService } from '../services/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -121,13 +121,55 @@ export function createServer(port: number = 7860): Promise<Server> {
 
     app.use(express.json());
 
+    function getAuthUser(req: express.Request): { id: string; username: string } | null {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return null;
+      }
+      const token = authHeader.slice(7).trim();
+      return authService.verifyToken(token);
+    }
+
+    // ==========================================
+    // Auth Routes
+    // ==========================================
+    app.post('/api/auth/register', async (req, res) => {
+      try {
+        const { username, password } = req.body;
+        const result = await authService.register(username, password);
+        res.json({ success: true, data: result });
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+      }
+    });
+
+    app.post('/api/auth/login', async (req, res) => {
+      try {
+        const { username, password } = req.body;
+        const result = await authService.login(username, password);
+        res.json({ success: true, data: result });
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+      }
+    });
+
+    app.get('/api/auth/me', (req, res) => {
+      const user = getAuthUser(req);
+      if (!user) {
+        res.status(401).json({ error: '未登录或登录已过期' });
+        return;
+      }
+      res.json({ success: true, data: user });
+    });
+
     app.get('/api/meta', (_req, res) => {
       res.json(appMetadata);
     });
 
-    app.get('/api/projects', async (_req, res) => {
+    app.get('/api/projects', async (req, res) => {
       try {
-        const projects = await storage.listProjects();
+        const user = getAuthUser(req);
+        const projects = await storage.listProjects(user?.id);
         res.json(projects);
       } catch (error) {
         res.status(500).json({ error: (error as Error).message });
@@ -411,7 +453,7 @@ export function createServer(port: number = 7860): Promise<Server> {
       }
     }
 
-    app.get('/api/annotations', (req, res) => {
+    app.get('/api/annotations', (_req, res) => {
       try {
         const list = loadAnnotations();
         res.json({ success: true, data: list });
@@ -459,7 +501,8 @@ export function createServer(port: number = 7860): Promise<Server> {
 
     app.post('/api/projects', async (req, res) => {
       try {
-        const project = await storage.createProject(req.body);
+        const user = getAuthUser(req);
+        const project = await storage.createProject(req.body, user?.id);
         res.json({ success: true, data: project });
       } catch (error) {
         res.status(500).json({ error: (error as Error).message });

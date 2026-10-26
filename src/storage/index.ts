@@ -109,7 +109,7 @@ export class ProjectStorage {
    * @param input - Project creation data
    * @returns The created project data
    */
-  async createProject(input: CreateProjectInput): Promise<ProjectData> {
+  async createProject(input: CreateProjectInput, userId?: string): Promise<ProjectData> {
     await this.ensureDirectory();
 
     const now = new Date().toISOString();
@@ -123,6 +123,7 @@ export class ProjectStorage {
       status: 'active',
       startDate: input.startDate,
       targetDate: input.targetDate,
+      userId: userId || undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -227,7 +228,7 @@ export class ProjectStorage {
    * List all projects sorted by updatedAt (descending)
    * @returns Array of project summaries (project + metadata)
    */
-  async listProjects(): Promise<Array<{ project: Project; taskCount: number; milestoneCount: number }>> {
+  async listProjects(userId?: string): Promise<Array<{ project: Project; taskCount: number; milestoneCount: number }>> {
     await this.ensureDirectory();
 
     const fs = await import('fs/promises');
@@ -240,6 +241,13 @@ export class ProjectStorage {
       try {
         const filePath = path.join(this.storageDir, file);
         const data = await readJsonFile<ProjectData>(filePath);
+
+        // Multi-tenant isolation: If a project has an owner, only the owner can see it.
+        // Projects without userId are public/legacy projects, visible to all.
+        if (data.project.userId && data.project.userId !== userId) {
+          continue;
+        }
+
         projects.push({
           project: data.project,
           taskCount: data.tasks.length,
