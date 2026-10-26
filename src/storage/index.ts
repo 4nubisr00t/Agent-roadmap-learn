@@ -133,7 +133,20 @@ export class ProjectStorage {
       milestones: [],
       tasks: [],
       tags: [],
-      dependencyViews: [],
+      dependencyViews: [
+        {
+          id: `view_${Date.now()}`,
+          projectId,
+          name: '🌟 技能拓扑树',
+          description: '主技能学习路线拓扑图',
+          dimension: null,
+          createdAt: now,
+          updatedAt: now,
+          revision: 1,
+          nodes: [],
+          edges: [],
+        },
+      ],
     };
 
     const filePath = this.getFilePath(projectId);

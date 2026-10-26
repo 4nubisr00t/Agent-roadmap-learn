@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { marked } from 'marked';
 import { getItem, setItem, STORAGE_KEYS } from './utils/storage.js';
 import TagBadge from './components/TagBadge.js';
 import TagFilter from './components/TagFilter.js';
@@ -96,17 +97,32 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string; bgColor: s
 
 const KANBAN_COLUMNS: TaskStatus[] = ['todo', 'in-progress', 'review', 'done'];
 
+export interface AnnotationItem {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  selectedText: string;
+  comment: string;
+  createdAt: string;
+  status?: string;
+}
+
 const App: React.FC = () => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [tasks, setTasks] = useState<{ task: Task; project: Project }[]>([]);
   const [cardMode, setCardMode] = useState<CardMode>('compact');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('kanban');
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('dependency');
   const [graphViews, setGraphViews] = useState<GraphSummary[]>([]);
   const [graphPickerTaskId, setGraphPickerTaskId] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [modalActiveTab, setModalActiveTab] = useState<'courseware' | 'notes' | 'gemini' | 'annotations'>('courseware');
+  const [annotations, setAnnotations] = useState<AnnotationItem[]>([]);
+  const [selectedHighlight, setSelectedHighlight] = useState<{ text: string; x: number; y: number } | null>(null);
+  const [isAnnotationModalOpen, setIsAnnotationModalOpen] = useState(false);
+  const [annotationComment, setAnnotationComment] = useState('');
   const [draggedTask, setDraggedTask] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
@@ -171,6 +187,7 @@ const App: React.FC = () => {
     if (savedViewPreferences?.workspaceMode) {
       setWorkspaceMode(savedViewPreferences.workspaceMode);
     }
+    fetchAnnotations();
   }, []);
 
   // Persist selected project when it changes
@@ -206,7 +223,18 @@ const App: React.FC = () => {
     fetch('/api/projects')
       .then(res => res.json())
       .then(data => {
-        setProjects(data as ProjectSummary[]);
+        const list = (data as ProjectSummary[]) || [];
+        setProjects(list);
+        if (list.length > 0) {
+          setSelectedProject((prev) => {
+            if (prev && list.some(item => item.project?.id === prev)) {
+              return prev;
+            }
+            return list[0].project?.id || null;
+          });
+        } else {
+          setSelectedProject(null);
+        }
       });
   }, []);
 
@@ -256,6 +284,46 @@ const App: React.FC = () => {
         setTasks(normalized);
       });
   }, [selectedProject, statusFilter, workspaceMode]);
+
+  // Auto sync on focus and periodic interval to pick up Agent updates
+  useEffect(() => {
+    const handleSync = () => {
+      const params = new URLSearchParams();
+      if (selectedProject) {
+        params.append('projectId', selectedProject);
+      }
+      params.append('includeCompleted', 'true');
+      const url = `/api/tasks?${params.toString()}`;
+
+      tasksRequestIdRef.current += 1;
+      const requestId = tasksRequestIdRef.current;
+
+      fetch(url)
+        .then(res => res.json())
+        .then(data => {
+          if (requestId !== tasksRequestIdRef.current) return;
+          if (Array.isArray(data)) {
+            const normalized = data.map((item) => ({
+              ...item,
+              task: {
+                ...item.task,
+                status: normalizeStatus(item.task.status),
+                tags: item.task.tags || [],
+              },
+            }));
+            setTasks(normalized);
+          }
+        })
+        .catch(() => {});
+    };
+
+    window.addEventListener('focus', handleSync);
+    const timer = setInterval(handleSync, 3000);
+    return () => {
+      window.removeEventListener('focus', handleSync);
+      clearInterval(timer);
+    };
+  }, [selectedProject]);
 
   useEffect(() => {
     if (selectedProject) {
@@ -435,6 +503,100 @@ const App: React.FC = () => {
     }
   };
 
+  const handleExportSingleNote = (task: Task) => {
+    const safeTitle = task.title.replace(/[\\/:*?"<>|]/g, '_');
+    const md = `# ${task.title}\n\n> 状态: ${task.status} | 优先级: ${task.priority}\n\n${task.description || ''}`;
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safeTitle}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleQuickSetStatus = async (taskId: string, newStatus: TaskStatus) => {
+    const ok = await updateTaskStatus(taskId, newStatus);
+    if (ok && editingTask && editingTask.id === taskId) {
+      setEditingTask({ ...editingTask, status: newStatus });
+    }
+  };
+
+  const fetchAnnotations = async () => {
+    try {
+      const res = await fetch('/api/annotations');
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success && Array.isArray(result.data)) {
+          setAnnotations(result.data);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load annotations:', err);
+    }
+  };
+
+  const handleSaveAnnotation = async () => {
+    if (!selectedHighlight || !annotationComment.trim() || !editingTask) return;
+    try {
+      const res = await fetch('/api/annotations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId: editingTask.id,
+          taskTitle: editingTask.title,
+          selectedText: selectedHighlight.text,
+          comment: annotationComment.trim(),
+        }),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success) {
+          setAnnotations(prev => [result.data, ...prev]);
+          setIsAnnotationModalOpen(false);
+          setSelectedHighlight(null);
+          setAnnotationComment('');
+          window.getSelection()?.removeAllRanges();
+          setModalActiveTab('annotations');
+        }
+      }
+    } catch (err) {
+      console.error('Failed to save annotation:', err);
+    }
+  };
+
+  const handleDeleteAnnotation = async (id: string) => {
+    try {
+      const res = await fetch(`/api/annotations/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setAnnotations(prev => prev.filter(a => a.id !== id));
+      }
+    } catch (err) {
+      console.error('Failed to delete annotation:', err);
+    }
+  };
+
+  const handleCoursewareMouseUp = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) {
+      return;
+    }
+    const text = selection.toString().trim();
+    if (text.length > 0 && text.length < 3000) {
+      try {
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        setSelectedHighlight({
+          text,
+          x: Math.max(80, Math.min(window.innerWidth - 80, rect.left + rect.width / 2)),
+          y: Math.max(50, rect.top - 10),
+        });
+      } catch (e) {
+        console.error('Selection rect error:', e);
+      }
+    }
+  };
+
   const handleDeleteTask = async (taskId: string, projectId: string) => {
     if (!confirm('Are you sure you want to delete this task?')) return;
 
@@ -564,16 +726,28 @@ const App: React.FC = () => {
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
-          setProjects(prev => [...prev, {
-            project: result.data,
-            taskCount: 0,
-            milestoneCount: 0
-          }]);
+          const createdProject = result.data.project || result.data;
+          const newId = createdProject.id;
+
+          const listRes = await fetch('/api/projects');
+          const listData = await listRes.json();
+          if (Array.isArray(listData)) {
+            setProjects(listData);
+          } else {
+            setProjects(prev => [{
+              project: createdProject,
+              taskCount: 0,
+              milestoneCount: 0
+            }, ...prev]);
+          }
+
+          setSelectedProject(newId);
+          setWorkspaceMode('dependency');
           setIsCreateProjectOpen(false);
           setNewProject({
             name: '',
             description: '',
-            projectType: 'roadmap',
+            projectType: 'skill-tree',
             startDate: new Date().toISOString().split('T')[0],
             targetDate: '',
           });
@@ -920,62 +1094,97 @@ const App: React.FC = () => {
     );
   };
 
+  const doneTasksCount = tasks.filter(t => normalizeStatus(t.task.status) === 'done').length;
+  const inProgressCount = tasks.filter(t => normalizeStatus(t.task.status) === 'in-progress').length;
+  const totalTasksCount = tasks.length;
+  const progressPercent = totalTasksCount > 0 ? Math.round((doneTasksCount / totalTasksCount) * 100) : 0;
+
   return (
-    <div className="min-h-screen bg-emerald-50/50 p-6">
-      <header className="mb-6 flex justify-between items-center">
-        <div className="leading-none">
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-            Road<span className="text-emerald-500">map</span>
-          </h1>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50/30 to-blue-50/20 p-6">
+      <header className="mb-6 flex flex-wrap justify-between items-center gap-4 bg-white/80 backdrop-blur-md p-4 rounded-2xl border border-white/80 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white text-xl shadow-md shadow-emerald-500/20 font-black">
+            ⚡
+          </div>
+          <div>
+            <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+              Agent<span className="text-emerald-500">Learn</span>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                模块化技能进阶
+              </span>
+            </h1>
+            <p className="text-xs text-slate-500 font-medium">Antigravity × Gemini 导师协同系统</p>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex bg-slate-200/50 rounded-xl p-1">
-              <button
-                type="button"
-                onClick={() => setWorkspaceMode('kanban')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                workspaceMode === 'kanban'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Kanban
-            </button>
-              <button
-                type="button"
-                onClick={() => setWorkspaceMode('dependency')}
+
+        {totalTasksCount > 0 && (
+          <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200/60">
+            <div className="text-right">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">技能补齐进度</div>
+              <div className="text-sm font-black text-slate-800">
+                {doneTasksCount} / {totalTasksCount} 模块 <span className="text-emerald-600 font-bold">({progressPercent}%)</span>
+              </div>
+            </div>
+            <div className="w-28 h-3 bg-slate-200 rounded-full overflow-hidden p-0.5">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-700 shadow-sm"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <div className="flex bg-slate-200/60 rounded-xl p-1 shadow-inner">
+            <button
+              type="button"
+              onClick={() => setWorkspaceMode('dependency')}
               disabled={!selectedProject}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
                 workspaceMode === 'dependency'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
+                  ? 'bg-white text-emerald-800 shadow-sm font-extrabold'
+                  : 'text-slate-600 hover:text-slate-900'
               } disabled:cursor-not-allowed disabled:opacity-40`}
             >
-              Graph
+              <span>🕸️</span>
+              <span>技能拓扑图 (Graph)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setWorkspaceMode('kanban')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                workspaceMode === 'kanban'
+                  ? 'bg-white text-emerald-800 shadow-sm font-extrabold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>📋</span>
+              <span>模块看板 (Kanban)</span>
             </button>
           </div>
+
           <div className="flex bg-slate-200/50 rounded-xl p-1">
-              <button
-                type="button"
-                onClick={() => setCardMode('compact')}
+            <button
+              type="button"
+              onClick={() => setCardMode('compact')}
               className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
                 cardMode === 'compact'
                   ? 'bg-white text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              Compact
+              紧凑
             </button>
-              <button
-                type="button"
-                onClick={() => setCardMode('detailed')}
+            <button
+              type="button"
+              onClick={() => setCardMode('detailed')}
               className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
                 cardMode === 'detailed'
                   ? 'bg-white text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              Detailed
+              详细
             </button>
           </div>
           {tags.length > 0 && (
@@ -1063,40 +1272,46 @@ const App: React.FC = () => {
                   </span>
                 </div>
               </button>
-              {projects.map(p => (
-                <div key={p.project.id} className="group relative">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedProject(p.project.id)}
-                    className={`w-full rounded-xl transition-all duration-300 ${selectedProject === p.project.id ? 'bg-white shadow-md ring-1 ring-slate-100 text-slate-900 font-bold' : 'text-slate-500 hover:bg-white/50 hover:text-slate-800'} ${
-                      isProjectSidebarCollapsed ? 'px-2 py-3 text-center' : 'text-left px-4 py-3'
-                    }`}
-                    title={isProjectSidebarCollapsed ? p.project.name : undefined}
-                  >
-                    <div className={`flex items-center ${isProjectSidebarCollapsed ? 'flex-col gap-1 justify-center' : 'justify-between'}`}>
-                      <span className={`${isProjectSidebarCollapsed ? 'text-[11px] font-black uppercase tracking-widest' : 'truncate pr-6'}`}>
-                        {isProjectSidebarCollapsed ? p.project.name.slice(0, 2) : p.project.name}
-                      </span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${selectedProject === p.project.id ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                        {p.taskCount}
-                      </span>
-                    </div>
-                  </button>
-                  {!isProjectSidebarCollapsed && (
+              {projects.map(p => {
+                const projectObj = (p.project as any)?.project || p.project;
+                const pId = projectObj?.id;
+                const pName = projectObj?.name || '未命名技能树';
+                if (!pId) return null;
+                return (
+                  <div key={pId} className="group relative">
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteProject(p.project.id);
-                      }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                      title="Delete Project"
+                      onClick={() => setSelectedProject(pId)}
+                      className={`w-full rounded-xl transition-all duration-300 ${selectedProject === pId ? 'bg-white shadow-md ring-1 ring-slate-100 text-slate-900 font-bold' : 'text-slate-500 hover:bg-white/50 hover:text-slate-800'} ${
+                        isProjectSidebarCollapsed ? 'px-2 py-3 text-center' : 'text-left px-4 py-3'
+                      }`}
+                      title={isProjectSidebarCollapsed ? pName : undefined}
                     >
-                      ✕
+                      <div className={`flex items-center ${isProjectSidebarCollapsed ? 'flex-col gap-1 justify-center' : 'justify-between'}`}>
+                        <span className={`${isProjectSidebarCollapsed ? 'text-[11px] font-black uppercase tracking-widest' : 'truncate pr-6'}`}>
+                          {isProjectSidebarCollapsed ? pName.slice(0, 2) : pName}
+                        </span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${selectedProject === pId ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                          {p.taskCount || 0}
+                        </span>
+                      </div>
                     </button>
-                  )}
-                </div>
-              ))}
+                    {!isProjectSidebarCollapsed && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteProject(pId);
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                        title="Delete Project"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
           <div className="mt-6 border-t border-slate-200/50 pt-6 space-y-3">
@@ -1265,6 +1480,13 @@ const App: React.FC = () => {
               onGraphsChange={setGraphViews}
               onTaskStatusChange={updateTaskStatus}
               onCreateTask={handleCreateTaskFromGraph}
+              onSelectTask={(taskId) => {
+                const item = tasks.find(t => t.task.id === taskId);
+                if (item) {
+                  setModalActiveTab('courseware');
+                  handleEditTask(item.task);
+                }
+              }}
               displayMode={cardMode}
               tags={tagsWithTaskCounts.map((tag) => ({
                 id: tag.id,
@@ -1296,94 +1518,435 @@ const App: React.FC = () => {
             }
           }}
         >
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slideUp">
-            <div className="p-6 border-b border-slate-100">
-              <h2 className="text-xl font-semibold text-slate-900">Edit Task</h2>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Title</label>
-                <input
-                  type="text"
-                  value={editingTask.title}
-                  onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-                <textarea
-                  value={editingTask.description || ''}
-                  onChange={(e) => setEditingTask({ ...editingTask, description: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
-                  <select
-                    value={editingTask.status}
-                    onChange={(e) => setEditingTask({ ...editingTask, status: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="todo">Todo</option>
-                    <option value="in-progress">In Progress</option>
-                    <option value="review">Review</option>
-                    <option value="done">Done</option>
-                  </select>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-slideUp border border-slate-100">
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between gap-4 bg-slate-50/70">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                    {STATUS_CONFIG[editingTask.status]?.label || editingTask.status}
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-500">
+                    {PRIORITY_CONFIG[editingTask.priority]?.label || editingTask.priority}
+                  </span>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
-                  <select
-                    value={editingTask.priority}
-                    onChange={(e) => setEditingTask({ ...editingTask, priority: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="critical">Critical</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                  </select>
-                </div>
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight truncate">
+                  {editingTask.title}
+                </h2>
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Tags</label>
-                <TagSelector
-                  tags={tags}
-                  selectedTagIds={editingTask.tags || []}
-                  onChange={(newTagIds) => setEditingTask({ ...editingTask, tags: newTagIds })}
-                />
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleExportSingleNote(editingTask)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95"
+                  title="导出本节讲义与笔记为 Markdown 文件"
+                >
+                  <span>📥</span>
+                  <span>导出笔记 (.md)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditModalOpen(false);
+                    setEditingTask(null);
+                  }}
+                  className="w-8 h-8 rounded-full bg-slate-200/60 text-slate-500 hover:text-slate-800 hover:bg-slate-200 flex items-center justify-center font-bold"
+                >
+                  ✕
+                </button>
               </div>
+            </div>
 
-              {editingTask.dueDate && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Due Date</label>
-                  <input
-                    type="date"
-                    value={editingTask.dueDate}
-                    onChange={(e) => setEditingTask({ ...editingTask, dueDate: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            {/* Navigation Tabs */}
+            <div className="flex items-center gap-2 px-6 pt-3 pb-2 border-b border-slate-100 bg-white">
+              <button
+                type="button"
+                onClick={() => setModalActiveTab('courseware')}
+                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                  modalActiveTab === 'courseware'
+                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/20'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <span>📖</span>
+                <span>课程全解讲义</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalActiveTab('notes')}
+                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                  modalActiveTab === 'notes'
+                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/20'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <span>✏️</span>
+                <span>自定义笔记与修改</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalActiveTab('gemini')}
+                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                  modalActiveTab === 'gemini'
+                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <span>🤖</span>
+                <span>向 Gemini 发起求教与考核</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalActiveTab('annotations')}
+                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                  modalActiveTab === 'annotations'
+                    ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/20'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <span>📌</span>
+                <span>我的批注与疑问 ({annotations.filter(a => a.taskId === editingTask.id).length})</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto flex-1 min-h-0 bg-white">
+              {modalActiveTab === 'courseware' && (
+                <div className="relative">
+                  {selectedHighlight && !isAnnotationModalOpen && (
+                    <div
+                      style={{
+                        position: 'fixed',
+                        left: `${selectedHighlight.x}px`,
+                        top: `${selectedHighlight.y}px`,
+                        transform: 'translate(-50%, -100%)',
+                        zIndex: 9999,
+                      }}
+                      className="animate-bounce pointer-events-auto"
+                    >
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIsAnnotationModalOpen(true);
+                        }}
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 text-amber-300 hover:text-white hover:bg-amber-600 rounded-full text-xs font-black shadow-2xl border border-amber-400/40 transition-all cursor-pointer active:scale-95"
+                      >
+                        <span>💬</span>
+                        <span>划词批注 / 提问</span>
+                      </button>
+                    </div>
+                  )}
+
+                  <div
+                    onMouseUp={handleCoursewareMouseUp}
+                    className="courseware-content max-w-none text-slate-800 leading-relaxed select-text cursor-text"
+                    dangerouslySetInnerHTML={{ __html: marked.parse(editingTask.description || '*暂无讲义内容*') }}
                   />
                 </div>
               )}
+
+              {modalActiveTab === 'annotations' && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-sm font-black text-amber-900 flex items-center gap-2">
+                        <span>📌</span>
+                        <span>本模块划词批注与待答疑问</span>
+                      </h3>
+                      <p className="text-xs text-amber-700 mt-1">
+                        你在讲义中划选打上的所有批注已自动实时同步给本地文件。下次在 Antigravity 中只要发话呼叫 Gemini，即可获取逐句攻坚解答！
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const moduleAnnotations = annotations.filter(a => a.taskId === editingTask.id);
+                        if (moduleAnnotations.length === 0) {
+                          alert('当前模块暂无批注');
+                          return;
+                        }
+                        const prompt = `Gemini老师，我在【${editingTask.title}】的讲义中做了以下几条批注和提问，请帮我逐条攻坚解答：\n\n` +
+                          moduleAnnotations.map((a, i) => `${i + 1}. 原文引用：【${a.selectedText}】\n   我的疑问：${a.comment}`).join('\n\n');
+                        navigator.clipboard.writeText(prompt);
+                        alert('已成功将全部批注提问复制到剪贴板！可以直接在聊天框粘贴发送给 Gemini！');
+                      }}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1 flex-shrink-0"
+                    >
+                      <span>📋</span>
+                      <span>一键复制所有批注提问</span>
+                    </button>
+                  </div>
+
+                  {annotations.filter(a => a.taskId === editingTask.id).length === 0 ? (
+                    <div className="text-center py-12 text-slate-400">
+                      <div className="text-4xl mb-2">💡</div>
+                      <p className="text-sm font-medium">当前模块暂无批注</p>
+                      <p className="text-xs text-slate-400 mt-1">回到「课程全解讲义」选项卡，用鼠标划选任何不懂的句子即可随时弹出批注提问！</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {annotations.filter(a => a.taskId === editingTask.id).map((ann, idx) => (
+                        <div key={ann.id} className="p-4 rounded-xl border border-slate-200 bg-white hover:border-amber-300 transition-all shadow-sm">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-black text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full">
+                              批注疑问 #{idx + 1}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] text-slate-400">{ann.createdAt}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAnnotation(ann.id)}
+                                className="text-xs text-slate-400 hover:text-red-500 font-bold px-2 py-0.5 rounded hover:bg-red-50"
+                                title="删除此条批注"
+                              >
+                                ✕ 删除
+                              </button>
+                            </div>
+                          </div>
+                          <div className="p-3 bg-slate-50 border-l-4 border-amber-400 rounded-r-lg mb-2.5 text-xs font-mono text-slate-700 select-all leading-relaxed">
+                            “{ann.selectedText}”
+                          </div>
+                          <div className="text-sm font-bold text-slate-900 flex items-start gap-2">
+                            <span className="text-amber-500 flex-shrink-0">❓</span>
+                            <span>{ann.comment}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {modalActiveTab === 'notes' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">模块名称</label>
+                    <input
+                      type="text"
+                      value={editingTask.title}
+                      onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">讲义与 Markdown 笔记内容</label>
+                    <textarea
+                      value={editingTask.description || ''}
+                      onChange={(e) => setEditingTask({ ...editingTask, description: e.target.value })}
+                      rows={14}
+                      className="w-full px-3.5 py-2.5 text-xs font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 leading-relaxed"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">掌握状态</label>
+                      <select
+                        value={editingTask.status}
+                        onChange={(e) => setEditingTask({ ...editingTask, status: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                      >
+                        <option value="todo">🔒 待学习 / 待补齐</option>
+                        <option value="in-progress">⚡ 攻克中 (In Progress)</option>
+                        <option value="review">📝 考核中 (Review)</option>
+                        <option value="done">🟢 已掌握点亮 (Done)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">重要优先级</label>
+                      <select
+                        value={editingTask.priority}
+                        onChange={(e) => setEditingTask({ ...editingTask, priority: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      >
+                        <option value="critical">🔥 核心必备 (Critical)</option>
+                        <option value="high">⭐ 高度推荐 (High)</option>
+                        <option value="medium">🔹 标准模块 (Medium)</option>
+                        <option value="low">🌱 选学扩展 (Low)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {modalActiveTab === 'gemini' && (
+                <div className="space-y-4">
+                  <div className="p-5 bg-gradient-to-br from-indigo-50 via-purple-50 to-emerald-50 rounded-2xl border border-indigo-100 shadow-sm space-y-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">🤖</span>
+                      <div>
+                        <h4 className="text-sm font-black text-indigo-950">Antigravity Gemini 导师联动</h4>
+                        <p className="text-xs text-indigo-700 font-medium">点击一键复制 Prompt，切回当前聊天窗即可直接提问</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`Gemini老师，我想学【${editingTask.title}】，请用通俗易懂的生活例子给我讲透它的核心原理和代码逻辑！`);
+                          alert('已复制！切回 Antigravity 聊天窗口粘贴发送即可。');
+                        }}
+                        className="p-3.5 bg-white/95 hover:bg-indigo-50 rounded-xl border border-indigo-200/80 text-left transition-all shadow-sm hover:shadow active:scale-95"
+                      >
+                        <div className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+                          <span>📖</span>
+                          <span>讲透核心原理</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-1">生活化比喻 + 逻辑拆解</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`Gemini老师，我已经学习了【${editingTask.title}】，请出一道带代码或场景的填空测试题考考我，我答对后再帮我点亮！`);
+                          alert('已复制！切回 Antigravity 聊天窗口粘贴发送即可。');
+                        }}
+                        className="p-3.5 bg-white/95 hover:bg-purple-50 rounded-xl border border-purple-200/80 text-left transition-all shadow-sm hover:shadow active:scale-95"
+                      >
+                        <div className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                          <span>🎯</span>
+                          <span>出一道考核题</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-1">实战填空 / 场景测试</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`Gemini老师，我已经通过了【${editingTask.title}】的实战练习，请帮我验收并点亮该模块！`);
+                          alert('已复制！切回 Antigravity 聊天窗口粘贴发送即可。');
+                        }}
+                        className="p-3.5 bg-white/95 hover:bg-emerald-50 rounded-xl border border-emerald-200/80 text-left transition-all shadow-sm hover:shadow active:scale-95"
+                      >
+                        <div className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                          <span>✨</span>
+                          <span>申请点亮模块</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-1">验收并点亮技能节点</div>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="p-6 border-t border-slate-100 flex justify-end gap-3">
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/80">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleQuickSetStatus(editingTask.id, 'done')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                    editingTask.status === 'done'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-white text-emerald-700 hover:bg-emerald-50 border border-emerald-200'
+                  }`}
+                >
+                  🟢 点亮此模块 (已掌握)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickSetStatus(editingTask.id, 'in-progress')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                    editingTask.status === 'in-progress'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-blue-700 hover:bg-blue-50 border border-blue-200'
+                  }`}
+                >
+                  ⚡ 设为攻克中
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {modalActiveTab === 'notes' && (
+                  <button
+                    type="button"
+                    onClick={handleSaveTask}
+                    className="px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl text-xs font-bold transition-all shadow-sm shadow-emerald-500/20"
+                  >
+                    保存笔记与修改
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditModalOpen(false);
+                    setEditingTask(null);
+                  }}
+                  className="px-4 py-2 bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-xl text-xs font-bold transition-all"
+                >
+                  关闭
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mini Dialog for Creating Annotation */}
+      {isAnnotationModalOpen && selectedHighlight && editingTask && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 animate-slideUp border border-slate-200">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                <span className="text-amber-500">💬</span>
+                <span>为划选文字添加批注 / 提问</span>
+              </h3>
               <button
+                type="button"
                 onClick={() => {
-                  setIsEditModalOpen(false);
-                  setEditingTask(null);
+                  setIsAnnotationModalOpen(false);
+                  setSelectedHighlight(null);
                 }}
-                className="px-4 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center font-bold text-sm"
               >
-                Cancel
+                ✕
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-xs font-bold text-slate-500 mb-1">已划选原文引用：</label>
+              <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-xs font-mono text-slate-800 max-h-32 overflow-y-auto leading-relaxed">
+                “{selectedHighlight.text}”
+              </div>
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                你的疑问或批注内容：
+              </label>
+              <textarea
+                value={annotationComment}
+                onChange={(e) => setAnnotationComment(e.target.value)}
+                placeholder="例如：为什么这里是覆盖 8 字节而不是 4 字节？请用通俗的语言解释底层原因..."
+                rows={4}
+                autoFocus
+                className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 leading-relaxed font-medium"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAnnotationModalOpen(false);
+                  setSelectedHighlight(null);
+                }}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+              >
+                取消
               </button>
               <button
-                onClick={handleSaveTask}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                type="button"
+                onClick={handleSaveAnnotation}
+                disabled={!annotationComment.trim()}
+                className="px-5 py-2 text-xs font-black text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-md shadow-amber-500/20 active:scale-95 flex items-center gap-1.5"
               >
-                Save Changes
+                <span>💾</span>
+                <span>保存并同步批注</span>
               </button>
             </div>
           </div>
@@ -1494,68 +2057,82 @@ const App: React.FC = () => {
             }
           }}
         >
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg animate-slideUp">
-            <div className="p-6 border-b border-slate-100">
-              <h2 className="text-xl font-semibold text-slate-900">Create New Project</h2>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-slideUp border border-slate-100">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                  NEW WORKSPACE
+                </span>
+                <h2 className="text-lg font-black text-slate-900 mt-2">🌱 创建新的学习技能树</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreateProjectOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center font-bold"
+              >
+                ✕
+              </button>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Name *</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">技能树名称 *</label>
                 <input
                   type="text"
                   value={newProject.name}
                   onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                  placeholder="Project name"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="例如：Pwn 二进制漏洞利用、Web渗透测试..."
+                  className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-medium"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">学习目标与说明</label>
                 <textarea
                   value={newProject.description}
                   onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                  placeholder="Project description"
+                  placeholder="简要写写这个学习树的目标或涵盖的模块知识点..."
                   rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none leading-relaxed"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">视图类型</label>
                   <select
                     value={newProject.projectType}
                     onChange={(e) => setNewProject({ ...newProject, projectType: e.target.value as any })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-bold text-slate-700"
                   >
-                    <option value="roadmap">Roadmap</option>
-                    <option value="skill-tree">Skill Tree</option>
-                    <option value="kanban">Kanban</option>
+                    <option value="skill-tree">🌟 技能树 (Skill Tree)</option>
+                    <option value="roadmap">📋 路线图 (Roadmap)</option>
+                    <option value="kanban">📊 看板 (Kanban)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Target Date</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">目标达成日期</label>
                   <input
                     type="date"
                     value={newProject.targetDate}
                     onChange={(e) => setNewProject({ ...newProject, targetDate: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   />
                 </div>
               </div>
             </div>
             <div className="p-6 border-t border-slate-100 flex justify-end gap-3">
               <button
+                type="button"
                 onClick={() => setIsCreateProjectOpen(false)}
-                className="px-4 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
               >
-                Cancel
+                取消
               </button>
               <button
+                type="button"
                 onClick={handleCreateProject}
                 disabled={!newProject.name.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors font-medium"
+                className="px-5 py-2.5 text-xs font-bold bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-md shadow-emerald-500/20 active:scale-95"
               >
-                Create Project
+                🚀 立即创建技能树
               </button>
             </div>
           </div>

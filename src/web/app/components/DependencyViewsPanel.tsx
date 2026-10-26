@@ -110,6 +110,7 @@ interface DependencyViewsPanelProps {
     priority: TaskPriority;
     tags: string[];
   }) => Promise<TaskItem | null>;
+  onSelectTask?: (taskId: string) => void;
 }
 
 type SavedGraphSelections = Record<string, string>;
@@ -200,10 +201,10 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  'todo': { label: 'TODO', cls: 'bg-slate-100 text-slate-600' },
-  'in-progress': { label: 'In Progress', cls: 'bg-blue-100 text-blue-700' },
-  'review': { label: 'Review', cls: 'bg-amber-100 text-amber-700' },
-  'done': { label: 'Done', cls: 'bg-emerald-100 text-emerald-700' },
+  'todo': { label: '待补齐', cls: 'bg-slate-100 text-slate-600' },
+  'in-progress': { label: '⚡ 攻克中', cls: 'bg-blue-100 text-blue-700 font-bold ring-1 ring-blue-300' },
+  'review': { label: '📝 考核中', cls: 'bg-amber-100 text-amber-700 font-bold ring-1 ring-amber-300' },
+  'done': { label: '🟢 已点亮', cls: 'bg-emerald-100 text-emerald-800 font-bold ring-1 ring-emerald-300' },
 };
 
 const STATUS_OPTIONS: TaskStatus[] = ['todo', 'in-progress', 'review', 'done'];
@@ -585,10 +586,10 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
   const isCompact = displayMode === 'compact';
   const readinessState = isDone ? 'done' : isReady ? 'ready' : 'blocked';
   const readinessBadge = isDone
-    ? { label: 'Completed', cls: 'bg-slate-200 text-slate-600', iconCls: 'text-slate-500' }
+    ? { label: '已掌握点亮', cls: 'bg-emerald-100 text-emerald-800 font-bold ring-1 ring-emerald-300', iconCls: 'text-emerald-600' }
     : isReady
-      ? { label: 'Ready', cls: 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30', iconCls: 'text-white/90' }
-      : { label: 'Waiting', cls: 'bg-amber-100 text-amber-700 ring-1 ring-amber-200', iconCls: 'text-amber-500' };
+      ? { label: '⚡ 推荐攻克', cls: 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-md shadow-blue-500/30 animate-pulse', iconCls: 'text-white/90' }
+      : { label: '🔒 需先掌握前置', cls: 'bg-slate-100 text-slate-500 ring-1 ring-slate-200 font-medium', iconCls: 'text-slate-400' };
   const surfaceStyle = isDone
     ? {
         width: layout.nodeWidth,
@@ -767,7 +768,11 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
         </div>
       </div>
       {/* Title + description */}
-      <div className="px-4 pt-2.5 pb-1">
+      <div
+        className="px-4 pt-2.5 pb-1 cursor-pointer hover:bg-slate-50/80 transition-colors rounded-xl"
+        onClick={() => (data as any).onSelect?.()}
+        title="点击查看课程详细讲义"
+      >
         <p className={`font-bold text-slate-800 leading-snug line-clamp-2 ${isCompact ? 'text-[13px]' : 'text-sm'}`}>{task.title}</p>
         {!isCompact && task.description && (
           <p className="text-xs text-slate-400 mt-1 line-clamp-2 leading-relaxed">{task.description}</p>
@@ -876,6 +881,7 @@ export default function DependencyViewsPanel({
   onGraphsChange,
   onTaskStatusChange,
   onCreateTask,
+  onSelectTask,
 }: DependencyViewsPanelProps) {
   const [graphs, setGraphs] = useState<GraphSummary[]>([]);
   const [selectedGraphId, setSelectedGraphId] = useState<string | null>(null);
@@ -1332,6 +1338,7 @@ export default function DependencyViewsPanel({
             onRemove: handleRemove,
             onStatusChange: handleTaskStatusChange,
             isStatusUpdating: updatingTaskIds.has(n.taskId),
+            onSelect: () => onSelectTask?.(n.taskId),
           } as unknown as TaskNodeData,
         };
       });
@@ -1782,6 +1789,7 @@ export default function DependencyViewsPanel({
               onConnect={handleConnect}
               onEdgesDelete={handleEdgesDelete}
               onEdgeClick={handleEdgeClick}
+              onNodeClick={(_event, node) => onSelectTask?.(node.id)}
               onPaneClick={() => setSelectedEdgeId(null)}
               onInit={(instance) => {
                 reactFlowInstanceRef.current = instance;
