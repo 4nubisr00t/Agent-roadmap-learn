@@ -8,6 +8,8 @@ import DependencyViewsPanel from './components/DependencyViewsPanel.js';
 import TagManagerModal from './components/modals/TagManagerModal.js';
 import { AuthModal } from './components/modals/AuthModal.js';
 import { AISettingsModal } from './components/modals/AISettingsModal.js';
+import { DocumentManagerModal } from './components/modals/DocumentManagerModal.js';
+import { AIRoadmapGeneratorModal } from './components/modals/AIRoadmapGeneratorModal.js';
 import { TaskAIChat } from './components/TaskAIChat.js';
 
 interface Project {
@@ -115,6 +117,9 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<{ id: string; username: string } | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isAISettingsOpen, setIsAISettingsOpen] = useState(false);
+  const [isDocManagerOpen, setIsDocManagerOpen] = useState(false);
+  const [isAIGeneratorOpen, setIsAIGeneratorOpen] = useState(false);
+  const [generatorPreDoc, setGeneratorPreDoc] = useState<{ id: string; title: string } | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [tasks, setTasks] = useState<{ task: Task; project: Project }[]>([]);
@@ -1294,6 +1299,21 @@ const App: React.FC = () => {
           <div className="h-5 w-px bg-slate-300" />
           <button
             type="button"
+            onClick={() => {
+              if (!currentUser) {
+                setIsAuthModalOpen(true);
+              } else {
+                setIsDocManagerOpen(true);
+              }
+            }}
+            title="管理与上传个人专属资料/电子书"
+            className="px-3 py-1.5 text-xs font-bold bg-white/90 hover:bg-white text-teal-700 border border-teal-200/80 hover:border-teal-300 rounded-xl shadow-sm hover:shadow transition-all flex items-center gap-1.5 active:scale-95"
+          >
+            <span>📚</span>
+            <span>我的资料库</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setIsAISettingsOpen(true)}
             title="配置大模型供应商与 API Key"
             className="px-3 py-1.5 text-xs font-bold bg-white/90 hover:bg-white text-indigo-700 border border-indigo-200/80 hover:border-indigo-300 rounded-xl shadow-sm hover:shadow transition-all flex items-center gap-1.5 active:scale-95"
@@ -1320,6 +1340,21 @@ const App: React.FC = () => {
                 title={isProjectSidebarCollapsed ? 'Expand project list' : 'Collapse project list'}
               >
                 {isProjectSidebarCollapsed ? '→' : '←'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!currentUser) {
+                    setIsAuthModalOpen(true);
+                  } else {
+                    setGeneratorPreDoc(null);
+                    setIsAIGeneratorOpen(true);
+                  }
+                }}
+                className="w-8 h-8 flex items-center justify-center bg-gradient-to-r from-teal-500 to-indigo-500 text-white rounded-full hover:from-teal-600 hover:to-indigo-600 transition-all shadow-md shadow-teal-500/20 active:scale-95"
+                title="AI 基于资料/电子书一键建树"
+              >
+                <span className="text-sm">✨</span>
               </button>
               <button
                 onClick={() => setIsCreateProjectOpen(true)}
@@ -1852,6 +1887,7 @@ const App: React.FC = () => {
                     task={editingTask}
                     project={projects.find(p => p.project.id === selectedProject)?.project || { id: selectedProject || '', name: '技能树路线' }}
                     annotations={annotations}
+                    currentUserId={currentUser?.id}
                     onOpenAISettings={() => setIsAISettingsOpen(true)}
                   />
 
@@ -2222,6 +2258,32 @@ const App: React.FC = () => {
       <AISettingsModal
         isOpen={isAISettingsOpen}
         onClose={() => setIsAISettingsOpen(false)}
+      />
+
+      <DocumentManagerModal
+        isOpen={isDocManagerOpen}
+        onClose={() => setIsDocManagerOpen(false)}
+        onGenerateRoadmap={(docId, docTitle) => {
+          setGeneratorPreDoc({ id: docId, title: docTitle });
+          setIsAIGeneratorOpen(true);
+        }}
+      />
+
+      <AIRoadmapGeneratorModal
+        isOpen={isAIGeneratorOpen}
+        onClose={() => {
+          setIsAIGeneratorOpen(false);
+          setGeneratorPreDoc(null);
+        }}
+        preSelectedDocId={generatorPreDoc?.id}
+        preSelectedDocTitle={generatorPreDoc?.title}
+        onSuccess={async (createdProjectData) => {
+          await loadProjects();
+          if (createdProjectData?.project?.id) {
+            setSelectedProject(createdProjectData.project.id);
+            setWorkspaceMode('dependency');
+          }
+        }}
       />
     </div>
   );

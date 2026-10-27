@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import fs, { existsSync } from 'node:fs';
 import type { Server } from 'http';
 import { storage } from '../storage/index.js';
-import { DependencyViewService, TaskService, TagService, authService, aiService } from '../services/index.js';
+import { DependencyViewService, TaskService, TagService, authService, aiService, documentService } from '../services/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -119,7 +119,8 @@ export function createServer(port: number = 7860): Promise<Server> {
   return new Promise((resolve, reject) => {
     const app = express();
 
-    app.use(express.json());
+    app.use(express.json({ limit: '50mb' }));
+    app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
     function getAuthUser(req: express.Request): { id: string; username: string } | null {
       const authHeader = req.headers.authorization;
@@ -224,6 +225,216 @@ export function createServer(port: number = 7860): Promise<Server> {
       }
     });
 
+    // ==========================================
+    // User Document / Knowledge Base Routes
+    // ==========================================
+    app.get('/api/documents', async (req, res) => {
+      try {
+        const user = getAuthUser(req);
+        if (!user) {
+          res.json({ success: true, data: [] });
+          return;
+        }
+        const docs = await documentService.list(user.id);
+        res.json({ success: true, data: docs });
+      } catch (error) {
+        res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
+    app.get('/api/documents/:id', async (req, res) => {
+      try {
+        const user = getAuthUser(req);
+        if (!user) {
+          res.status(401).json({ error: '未登录' });
+          return;
+        }
+        const doc = await documentService.get(user.id, req.params.id);
+        if (!doc) {
+          res.status(404).json({ error: '资料未找到或无权访问' });
+          return;
+        }
+        res.json({ success: true, data: doc });
+      } catch (error) {
+        res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
+    app.post('/api/documents', async (req, res) => {
+      try {
+        const user = getAuthUser(req);
+        if (!user) {
+          res.status(401).json({ error: '请先登录账号以上传个人专属资料' });
+          return;
+        }
+        const { title, originalName, fileType, content, base64, tags } = req.body;
+        const doc = await documentService.create(user.id, {
+          title,
+          originalName,
+          fileType,
+          content,
+          base64,
+          tags,
+        });
+        res.json({ success: true, data: doc });
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+      }
+    });
+
+    app.delete('/api/documents/:id', async (req, res) => {
+      try {
+        const user = getAuthUser(req);
+        if (!user) {
+          res.status(401).json({ error: '未登录' });
+          return;
+        }
+        const success = await documentService.delete(user.id, req.params.id);
+        res.json({ success });
+      } catch (error) {
+        res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
+    // ==========================================
+    // AI Skill Tree Generator from Materials
+    // ==========================================
+    app.post('/api/ai/generate-roadmap', async (req, res) => {
+      try {
+        const user = getAuthUser(req);
+        if (!user) {
+          res.status(401).json({ error: '请先登录账号以生成您的专属技能树' });
+          return;
+        }
+
+        const {
+          documentIds,
+          rawMaterialText,
+          topicName,
+          targetLevel,
+          provider,
+          baseUrl,
+          apiKey,
+          model,
+        } = req.body;
+
+        let combinedMaterial = rawMaterialText || '';
+
+        if (Array.isArray(documentIds) && documentIds.length > 0) {
+          for (const docId of documentIds) {
+            const doc = await documentService.get(user.id, docId);
+            if (doc && doc.content) {
+              combinedMaterial += `\n\n【教材/资料：《${doc.title}》】\n${doc.content.slice(0, 10000)}`;
+            }
+          }
+        }
+
+        if (!combinedMaterial.trim()) {
+          res.status(400).json({ error: '未提供任何教材文本或未选中有效资料' });
+          return;
+        }
+
+        const plan = await aiService.generateSkillTreePlan({
+          materialText: combinedMaterial,
+          topicName: topicName || '专属学习技能树',
+          targetLevel: targetLevel || '初学者至实战专家',
+          provider,
+          baseUrl,
+          apiKey,
+          model,
+        });
+
+        const projectId = `proj_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        const now = new Date().toISOString();
+
+        const milestones = (plan.milestones || []).map((m, idx) => ({
+          id: `ms_${Date.now()}_${idx}`,
+          title: m.title,
+          description: '',
+          targetDate: undefined,
+          status: 'planned' as const,
+          order: idx + 1,
+          createdAt: now,
+          updatedAt: now,
+        }));
+
+        const milestoneIdMap: Record<string, string> = {};
+        (plan.milestones || []).forEach((m, idx) => {
+          milestoneIdMap[m.id] = milestones[idx].id;
+        });
+
+        const taskIdMap: Record<string, string> = {};
+        const tasks = (plan.tasks || []).map((t, idx) => {
+          const newTaskId = `task_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
+          taskIdMap[t.id] = newTaskId;
+          return {
+            id: newTaskId,
+            title: t.title,
+            description: t.description || '',
+            status: idx === 0 ? ('in-progress' as const) : ('todo' as const),
+            priority: t.priority || 'medium',
+            milestoneId: milestoneIdMap[t.milestoneId] || milestones[0]?.id,
+            tags: t.tags || [],
+            createdAt: now,
+            updatedAt: now,
+          };
+        });
+
+        const graphId = `graph_${Date.now()}`;
+        const nodes = tasks.map((t, idx) => ({
+          id: `node_${t.id}`,
+          taskId: t.id,
+          position: { x: 260 * (idx % 3), y: 160 * Math.floor(idx / 3) },
+          status: t.status,
+        }));
+
+        const edges = (plan.dependencies || []).map((dep, idx) => {
+          const s = taskIdMap[dep.source] || dep.source;
+          const t = taskIdMap[dep.target] || dep.target;
+          return {
+            id: `edge_${Date.now()}_${idx}`,
+            source: s,
+            target: t,
+            type: (dep.type as any) || 'prerequisite',
+          };
+        });
+
+        const dependencyView = {
+          id: graphId,
+          name: '核心学习拓扑',
+          description: `基于《${topicName}》资料由 AI 自动构建的认知进阶路径`,
+          dimension: 'technical' as const,
+          revision: 1,
+          nodes,
+          edges,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        const projectData = {
+          project: {
+            id: projectId,
+            name: plan.name || topicName,
+            description: plan.description || '根据上传资料自动提炼生成的专属技能树',
+            projectType: 'skill-tree' as const,
+            status: 'active' as const,
+            userId: user.id, // Strictly isolated per user!
+            createdAt: now,
+            updatedAt: now,
+          },
+          milestones,
+          tasks,
+          tags: [],
+          dependencyViews: [dependencyView],
+        };
+
+        await storage.saveFullProject(projectData);
+        res.json({ success: true, data: projectData });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message || '生成技能树失败' });
+      }
+    });
+
     app.get('/api/projects', async (req, res) => {
       try {
         const user = getAuthUser(req);
@@ -236,7 +447,8 @@ export function createServer(port: number = 7860): Promise<Server> {
 
     app.get('/api/projects/:id', async (req, res) => {
       try {
-        const project = await storage.readProject(req.params.id);
+        const user = getAuthUser(req);
+        const project = await storage.readProject(req.params.id, user?.id);
         if (!project) {
           res.status(404).json({ error: 'Project not found' });
           return;
@@ -511,9 +723,15 @@ export function createServer(port: number = 7860): Promise<Server> {
       }
     }
 
-    app.get('/api/annotations', (_req, res) => {
+    app.get('/api/annotations', (req, res) => {
       try {
-        const list = loadAnnotations();
+        const user = getAuthUser(req);
+        let list = loadAnnotations();
+        if (user) {
+          list = list.filter((item: any) => !item.userId || item.userId === user.id);
+        } else {
+          list = list.filter((item: any) => !item.userId);
+        }
         res.json({ success: true, data: list });
       } catch (error) {
         res.status(500).json({ error: (error as Error).message });
@@ -522,6 +740,7 @@ export function createServer(port: number = 7860): Promise<Server> {
 
     app.post('/api/annotations', (req, res) => {
       try {
+        const user = getAuthUser(req);
         const { taskId, taskTitle, selectedText, comment } = req.body;
         if (!selectedText || !comment) {
           res.status(400).json({ error: 'selectedText and comment are required' });
@@ -530,6 +749,7 @@ export function createServer(port: number = 7860): Promise<Server> {
         const list = loadAnnotations();
         const newAnnotation = {
           id: 'ann_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+          userId: user ? user.id : undefined,
           taskId: taskId || '',
           taskTitle: taskTitle || '',
           selectedText: selectedText.trim(),
@@ -547,8 +767,14 @@ export function createServer(port: number = 7860): Promise<Server> {
 
     app.delete('/api/annotations/:id', (req, res) => {
       try {
+        const user = getAuthUser(req);
         const { id } = req.params;
         let list = loadAnnotations();
+        const target = list.find((it: any) => it.id === id);
+        if (target && target.userId && target.userId !== user?.id) {
+          res.status(403).json({ error: '无权删除其他用户的批注' });
+          return;
+        }
         list = list.filter((item: any) => item.id !== id);
         syncAnnotationsToFile(list);
         res.json({ success: true });
@@ -569,8 +795,9 @@ export function createServer(port: number = 7860): Promise<Server> {
 
     app.put('/api/projects', async (req, res) => {
       try {
+        const user = getAuthUser(req);
         const { projectId, ...updateData } = req.body;
-        const project = await storage.updateProject(projectId, updateData);
+        const project = await storage.updateProject(projectId, updateData, user?.id);
         res.json({ success: true, data: project });
       } catch (error) {
         res.status(500).json({ error: (error as Error).message });
@@ -579,8 +806,9 @@ export function createServer(port: number = 7860): Promise<Server> {
 
     app.delete('/api/projects', async (req, res) => {
       try {
+        const user = getAuthUser(req);
         const { projectId } = req.query;
-        await storage.deleteProject(projectId as string);
+        await storage.deleteProject(projectId as string, user?.id);
         res.json({ success: true });
       } catch (error) {
         res.status(500).json({ error: (error as Error).message });

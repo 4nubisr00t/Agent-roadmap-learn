@@ -35,6 +35,7 @@ interface TaskAIChatProps {
   task: Task;
   project: Project;
   annotations: AnnotationItem[];
+  currentUserId?: string;
   onOpenAISettings: () => void;
 }
 
@@ -42,11 +43,14 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
   task,
   project,
   annotations,
+  currentUserId,
   onOpenAISettings,
 }) => {
+  const cacheKey = `roadmap_chat_${currentUserId || 'guest'}_${task.id}`;
+
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
-      const saved = localStorage.getItem(`roadmap_chat_${task.id}`);
+      const saved = localStorage.getItem(cacheKey);
       if (saved) return JSON.parse(saved);
     } catch {}
     return [];
@@ -58,36 +62,27 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
   const [activeSettings, setActiveSettings] = useState<AISettingsState | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Load active AI settings
+  // Reload messages when task or user changes
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('roadmap_ai_config');
-      if (saved) {
-        setActiveSettings(JSON.parse(saved));
-      }
-    } catch {}
-  }, []);
+      const saved = localStorage.getItem(cacheKey);
+      setMessages(saved ? JSON.parse(saved) : []);
+    } catch {
+      setMessages([]);
+    }
+  }, [cacheKey]);
 
-  // Save messages per task
+  // Save messages per task and user
   useEffect(() => {
     try {
-      localStorage.setItem(`roadmap_chat_${task.id}`, JSON.stringify(messages));
+      localStorage.setItem(cacheKey, JSON.stringify(messages));
     } catch {}
-  }, [messages, task.id]);
-
-  // Auto-scroll to bottom
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, streamBuffer]);
+  }, [messages, cacheKey]);
 
   const handleClearHistory = () => {
     if (confirm('确认清空当前节点的对话记录吗？')) {
       setMessages([]);
-      localStorage.removeItem(`roadmap_chat_${task.id}`);
+      localStorage.removeItem(cacheKey);
     }
   };
 

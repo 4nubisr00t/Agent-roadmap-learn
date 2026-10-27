@@ -44,6 +44,7 @@
   "homepage": "https://github.com/shiquda/roadmap-skill#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
+    "@types/pdf-parse": "1.1.5",
     "@xyflow/react": "12.10.1",
     "bcryptjs": "3.0.3",
     "dagre": "0.8.5",
@@ -53,6 +54,7 @@
     "jsonwebtoken": "9.0.3",
     "marked": "18.1.1",
     "open": "^11.0.0",
+    "pdf-parse": "2.4.5",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "uuid": "^9.0.1",

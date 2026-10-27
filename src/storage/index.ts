@@ -157,14 +157,31 @@ export class ProjectStorage {
   }
 
   /**
+   * Save a full project data object (used for AI generation or import)
+   */
+  async saveFullProject(projectData: ProjectData): Promise<ProjectData> {
+    await this.ensureDirectory();
+    const filePath = this.getFilePath(projectData.project.id);
+    await writeJsonFile(filePath, projectData);
+    return projectData;
+  }
+
+  /**
    * Read a project by ID
    * @param projectId - The project ID
-   * @returns The project data or null if not found
+   * @param userId - Optional requesting user ID for permission check
+   * @returns The project data or null if not found or unauthorized
    */
-  async readProject(projectId: string): Promise<ProjectData | null> {
+  async readProject(projectId: string, userId?: string): Promise<ProjectData | null> {
     try {
       const filePath = this.getFilePath(projectId);
       const projectData = await readJsonFile<ProjectData>(filePath);
+
+      // Multi-tenant isolation: If project belongs to a user, other users/guests cannot access it
+      if (projectData.project.userId && projectData.project.userId !== userId) {
+        return null;
+      }
+
       return {
         ...projectData,
         dependencyViews: projectData.dependencyViews ?? [],
@@ -181,13 +198,19 @@ export class ProjectStorage {
    * Update an existing project
    * @param projectId - The project ID
    * @param input - Project update data
+   * @param userId - Optional requesting user ID for permission check
    * @returns The updated project data or null if not found
    */
   async updateProject(
     projectId: string,
-    input: UpdateProjectInput
+    input: UpdateProjectInput,
+    userId?: string
   ): Promise<ProjectData | null> {
     return this.mutateProject(projectId, async (projectData) => {
+      if (projectData.project.userId && projectData.project.userId !== userId) {
+        throw new Error('无权修改此项目：仅创建者可编辑');
+      }
+
       const now = new Date().toISOString();
 
       projectData.project = {
@@ -206,12 +229,18 @@ export class ProjectStorage {
   /**
    * Delete a project by ID
    * @param projectId - The project ID
+   * @param userId - Optional requesting user ID for permission check
    * @returns True if deleted, false if not found
    */
-  async deleteProject(projectId: string): Promise<boolean> {
+  async deleteProject(projectId: string, userId?: string): Promise<boolean> {
     return this.runProjectMutation(projectId, async () => {
       try {
         const filePath = this.getFilePath(projectId);
+        const projectData = await readJsonFile<ProjectData>(filePath);
+        if (projectData.project.userId && projectData.project.userId !== userId) {
+          throw new Error('无权删除此项目：仅创建者可删除');
+        }
+
         const fs = await import('fs/promises');
         await fs.unlink(filePath);
         return true;

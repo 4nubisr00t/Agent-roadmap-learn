@@ -275,6 +275,128 @@ export class AIService {
       }),
     });
   }
+
+  async generateSkillTreePlan(options: {
+    materialText: string;
+    topicName: string;
+    targetLevel?: string;
+    provider?: string;
+    baseUrl?: string;
+    apiKey?: string;
+    model?: string;
+  }): Promise<{
+    name: string;
+    description: string;
+    milestones: Array<{ id: string; title: string; order: number }>;
+    tasks: Array<{
+      id: string;
+      title: string;
+      description: string;
+      milestoneId: string;
+      priority: 'critical' | 'high' | 'medium' | 'low';
+      tags: string[];
+    }>;
+    dependencies: Array<{ source: string; target: string; type?: string }>;
+  }> {
+    const creds = this.resolveCredentials(options);
+    if (!creds.baseUrl) {
+      throw new Error('未配置 AI 供应商或 Base URL');
+    }
+
+    const endpoint = this.normalizeUrl(creds.baseUrl);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (creds.apiKey) {
+      headers['Authorization'] = `Bearer ${creds.apiKey}`;
+    }
+
+    const systemPrompt = `你是一位世界顶级的课程研发专家与知识图谱架构师。
+你的任务是根据用户提供的资料/教材/大纲文本，为《${options.topicName}》设计一套由浅入深、循序渐进、结构严谨的技能树（Skill Tree）。
+培养目标受众级别：${options.targetLevel || '零基础到实战精通'}。
+
+请将知识分解为 3~4 个阶段（Milestones），每个阶段分解为 2~4 个攻坚节点（Tasks），并标注清晰的前后依赖关系（Dependencies）。
+每个节点必须包含具体的标题和讲义描述（包含：1. 为什么学这个；2. 核心原理要点；3. 实操验证标准）。
+
+【返回格式要求】
+必须严格输出纯 JSON 对象，不要用 markdown 包裹，也不要有任何其他解释性文字：
+{
+  "name": "${options.topicName}",
+  "description": "简要介绍本技能树的核心成长路径与终极实战目标",
+  "milestones": [
+    { "id": "m1", "title": "第一阶段：基础底座与环境准备", "order": 1 },
+    { "id": "m2", "title": "第二阶段：核心机制与关键突破", "order": 2 },
+    { "id": "m3", "title": "第三阶段：进阶防御与综合实战", "order": 3 }
+  ],
+  "tasks": [
+    {
+      "id": "t1_1",
+      "title": "节点 1.1：...",
+      "description": "### 1. 为什么学这个\\n...\\n### 2. 核心原理要点\\n...\\n### 3. 实操验证标准\\n...",
+      "milestoneId": "m1",
+      "priority": "high",
+      "tags": ["基础", "核心"]
+    }
+  ],
+  "dependencies": [
+    { "source": "t1_1", "target": "t1_2", "type": "prerequisite" }
+  ]
+}`;
+
+    const userPrompt = `【以下是用户提供的教材/大纲/资料内容】：\n\n${options.materialText.slice(0, 15000)}\n\n请立即根据上述教材资料，提炼生成完整的技能树 JSON。`;
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: creds.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.3,
+        stream: false,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      let msg = `HTTP ${res.status}: ${res.statusText}`;
+      try {
+        const parsed = JSON.parse(errText);
+        if (parsed.error?.message) msg = parsed.error.message;
+      } catch {}
+      throw new Error(`AI 生成失败: ${msg}`);
+    }
+
+    const data = await res.json();
+    const rawContent = data.choices?.[0]?.message?.content || '';
+    if (!rawContent) {
+      throw new Error('AI 未返回有效内容');
+    }
+
+    let cleaned = rawContent.trim();
+    if (cleaned.startsWith('```json')) {
+      cleaned = cleaned.replace(/^```json\s*/i, '').replace(/\s*```$/, '');
+    } else if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+    }
+
+    try {
+      const parsed = JSON.parse(cleaned);
+      if (!parsed.milestones || !parsed.tasks) {
+        throw new Error('JSON 缺少 milestones 或 tasks 字段');
+      }
+      return parsed;
+    } catch (parseErr: any) {
+      throw new Error(`解析 AI 返回的 JSON 失败: ${parseErr.message}。原始内容片段: ${rawContent.slice(0, 300)}`);
+    }
+  }
 }
 
 export const aiService = new AIService();
