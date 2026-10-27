@@ -1,51 +1,237 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AgentLearn | 智能体模块化进阶工作台</title>
+    <title>AgentLearn | 模块化进阶架构平台</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              gold: {
+                50: '#fffbeb',
+                100: '#fef3c7',
+                200: '#fde68a',
+                300: '#fcd34d',
+                400: '#fbbf24',
+                500: '#f59e0b',
+                600: '#d97706',
+                700: '#b45309',
+                800: '#92400e',
+                900: '#78350f',
+              },
+              obsidian: {
+                950: '#09090b',
+                900: '#121215',
+                850: '#18181b',
+                800: '#202024',
+              }
+            }
+          }
+        }
+      }
+    </script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+        
+        :root {
+            color-scheme: dark;
+        }
+
         body {
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            background-color: #f8fafc;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #09090b;
+            color: #f4f4f5;
+            overflow-x: hidden;
         }
+
+        code, pre {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Obsidian Titanium Mesh Grid */
         .roadmap-grid {
-            background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
-            background-size: 24px 24px;
+            background-color: #09090b;
+            background-image: 
+                radial-gradient(rgba(245, 158, 11, 0.08) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(9, 9, 11, 0.7), #09090b);
+            background-size: 28px 28px, 100% 100%;
+            background-attachment: fixed;
         }
+
+        /* Custom Black Gold Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(18, 18, 21, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(245, 158, 11, 0.25);
+            border-radius: 9999px;
+            transition: all 0.2s ease;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(245, 158, 11, 0.5);
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
+        }
+
+        /* Button & Card Micro-Interactions */
+        button, a, input, select, textarea {
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        button:active:not(:disabled) {
+            transform: scale(0.97);
+        }
+
+        /* Ambient Glow & Leather Edge Shadows */
+        .gold-glow {
+            box-shadow: 0 0 25px -5px rgba(245, 158, 11, 0.15), 0 0 10px -5px rgba(245, 158, 11, 0.1);
+        }
+        .leather-card {
+            background: linear-gradient(145deg, rgba(24, 24, 27, 0.85) 0%, rgba(18, 18, 21, 0.95) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+        .gold-border {
+            border: 1px solid rgba(245, 158, 11, 0.25);
+        }
+        .gold-border-hover:hover {
+            border-color: rgba(245, 158, 11, 0.5);
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.12);
+        }
+
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
         }
         @keyframes slideUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+            from { opacity: 0; transform: translateY(16px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
         }
         .animate-fadeIn {
-            animation: fadeIn 0.2s ease-out;
+            animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .animate-slideUp {
-            animation: slideUp 0.3s ease-out;
+            animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        .courseware-content h1 { font-size: 1.4rem; font-weight: 800; margin-top: 1.25rem; margin-bottom: 0.75rem; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; }
-        .courseware-content h2 { font-size: 1.2rem; font-weight: 700; margin-top: 1.25rem; margin-bottom: 0.5rem; color: #1e293b; border-left: 4px solid #10b981; padding-left: 0.6rem; }
-        .courseware-content h3 { font-size: 1.05rem; font-weight: 700; margin-top: 1rem; margin-bottom: 0.5rem; color: #334155; }
-        .courseware-content p { margin-bottom: 0.75rem; line-height: 1.7; color: #334155; }
-        .courseware-content ul, .courseware-content ol { margin-left: 1.5rem; margin-bottom: 0.75rem; list-style-type: disc; }
-        .courseware-content li { margin-bottom: 0.35rem; line-height: 1.6; }
-        .courseware-content pre { background: #0f172a; color: #f8fafc; padding: 1rem; border-radius: 0.75rem; overflow-x: auto; font-family: monospace; font-size: 0.85rem; margin-bottom: 1rem; border: 1px solid #334155; }
-        .courseware-content code { background: #f1f5f9; color: #0f172a; padding: 0.15rem 0.4rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.85rem; font-weight: 600; }
-        .courseware-content pre code { background: transparent; color: inherit; padding: 0; font-weight: normal; }
-        .courseware-content table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; font-size: 0.875rem; border-radius: 0.5rem; overflow: hidden; }
-        .courseware-content th, .courseware-content td { border: 1px solid #e2e8f0; padding: 0.6rem 0.8rem; text-align: left; }
-        .courseware-content th { background: #f8fafc; font-weight: 700; color: #1e293b; }
-        .courseware-content blockquote { border-left: 4px solid #3b82f6; background: #eff6ff; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem; color: #1e40af; }
-        .courseware-content hr { margin-top: 1.25rem; margin-bottom: 1.25rem; border: 0; border-top: 1px solid #e2e8f0; }
+
+        /* Dark Gold Luxury Courseware Typography */
+        .courseware-content h1 { 
+            font-size: 1.45rem; 
+            font-weight: 800; 
+            margin-top: 1.5rem; 
+            margin-bottom: 0.85rem; 
+            color: #fbbf24; 
+            border-bottom: 1px solid rgba(245, 158, 11, 0.2); 
+            padding-bottom: 0.6rem; 
+            letter-spacing: -0.02em;
+        }
+        .courseware-content h2 { 
+            font-size: 1.25rem; 
+            font-weight: 700; 
+            margin-top: 1.5rem; 
+            margin-bottom: 0.6rem; 
+            color: #f4f4f5; 
+            border-left: 3px solid #f59e0b; 
+            padding-left: 0.75rem; 
+        }
+        .courseware-content h3 { 
+            font-size: 1.1rem; 
+            font-weight: 700; 
+            margin-top: 1.25rem; 
+            margin-bottom: 0.5rem; 
+            color: #e4e4e7; 
+        }
+        .courseware-content p { 
+            margin-bottom: 0.85rem; 
+            line-height: 1.8; 
+            color: #a1a1aa; 
+            font-size: 0.925rem;
+        }
+        .courseware-content ul, .courseware-content ol { 
+            margin-left: 1.5rem; 
+            margin-bottom: 0.85rem; 
+            list-style-type: disc; 
+            color: #a1a1aa;
+        }
+        .courseware-content li { 
+            margin-bottom: 0.4rem; 
+            line-height: 1.7; 
+        }
+        .courseware-content pre { 
+            background: #0d0d10; 
+            color: #f4f4f5; 
+            padding: 1.15rem; 
+            border-radius: 0.85rem; 
+            overflow-x: auto; 
+            font-size: 0.85rem; 
+            margin-bottom: 1.15rem; 
+            border: 1px solid rgba(245, 158, 11, 0.18); 
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+        }
+        .courseware-content code { 
+            background: rgba(245, 158, 11, 0.1); 
+            color: #fbbf24; 
+            padding: 0.15rem 0.45rem; 
+            border-radius: 0.35rem; 
+            font-size: 0.85rem; 
+            font-weight: 500; 
+            border: 1px solid rgba(245, 158, 11, 0.15);
+        }
+        .courseware-content pre code { 
+            background: transparent; 
+            color: inherit; 
+            padding: 0; 
+            border: none;
+            font-weight: normal; 
+        }
+        .courseware-content table { 
+            width: 100%; 
+            border-collapse: separate; 
+            border-spacing: 0;
+            margin-bottom: 1.25rem; 
+            font-size: 0.85rem; 
+            border-radius: 0.75rem; 
+            overflow: hidden; 
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .courseware-content th, .courseware-content td { 
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06); 
+            padding: 0.7rem 0.9rem; 
+            text-align: left; 
+        }
+        .courseware-content th { 
+            background: rgba(24, 24, 27, 0.9); 
+            font-weight: 700; 
+            color: #fbbf24; 
+            border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+        }
+        .courseware-content tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .courseware-content blockquote { 
+            border-left: 3px solid #f59e0b; 
+            background: rgba(245, 158, 11, 0.05); 
+            padding: 0.85rem 1.15rem; 
+            border-radius: 0.65rem; 
+            margin-bottom: 1.15rem; 
+            color: #fde68a; 
+            font-style: italic;
+        }
+        .courseware-content hr { 
+            margin-top: 1.5rem; 
+            margin-bottom: 1.5rem; 
+            border: 0; 
+            border-top: 1px solid rgba(255, 255, 255, 0.08); 
+        }
     </style>
 </head>
-<body class="roadmap-grid">
+<body class="roadmap-grid min-h-screen">
     <div id="root"></div>
     <script type="module" src="/main.tsx"></script>
 </body>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import TagBadge from '../TagBadge.js';
 import ColorPicker from '../ColorPicker.js';
+import { IconPin, IconClose, IconPlus, IconTrash, IconEdit, IconCheck } from '../Icons.js';
 
 interface Tag {
   id: string;
@@ -27,7 +28,7 @@ const TagManagerModal: React.FC<TagManagerModalProps> = ({
   onTagsChange,
 }) => {
   const [newTagName, setNewTagName] = useState('');
-  const [newTagColor, setNewTagColor] = useState('#74B9FF');
+  const [newTagColor, setNewTagColor] = useState('#F59E0B');
   const [editingTagId, setEditingTagId] = useState<string | null>(null);
   const [editingTagName, setEditingTagName] = useState('');
   const [editingTagColor, setEditingTagColor] = useState('');
@@ -52,7 +53,7 @@ const TagManagerModal: React.FC<TagManagerModalProps> = ({
         if (result.success) {
           onTagsChange([...tags, result.data]);
           setNewTagName('');
-          setNewTagColor('#74B9FF');
+          setNewTagColor('#F59E0B');
         }
       }
     } catch (error) {
@@ -89,7 +90,7 @@ const TagManagerModal: React.FC<TagManagerModalProps> = ({
   };
 
   const handleDeleteTag = async (tagId: string) => {
-    if (!confirm('Are you sure you want to delete this tag?')) return;
+    if (!confirm('确定要删除此标签吗？')) return;
     setIsLoading(true);
     try {
       const response = await fetch(`/api/projects/${projectId}/tags/${tagId}`, {
@@ -116,77 +117,81 @@ const TagManagerModal: React.FC<TagManagerModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn"
+      className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-slideUp">
+      <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-slideUp border border-zinc-750 text-zinc-100">
         {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Manage Tags</h2>
+        <div className="px-6 py-5 border-b border-zinc-800 flex justify-between items-center bg-zinc-950/60">
+          <div className="flex items-center gap-2.5">
+            <IconPin className="w-5 h-5 text-amber-400" />
+            <h2 className="text-lg font-black text-zinc-100 tracking-tight">知识标签管理</h2>
+          </div>
           <button 
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 active:scale-95 transition-all"
           >
-            ✕
+            <IconClose className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Create New Tag */}
-          <section className="space-y-4">
-            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Create New Tag</h3>
-            <div className="bg-slate-50 p-4 rounded-xl space-y-4 border border-slate-100">
-              <div className="flex gap-3">
+          <section className="space-y-3">
+            <h3 className="text-xs font-black text-zinc-400 uppercase tracking-widest">创建新标签</h3>
+            <div className="bg-zinc-950/80 p-4 rounded-xl space-y-3 border border-zinc-800">
+              <div className="flex gap-2">
                 <input
                   type="text"
                   value={newTagName}
                   onChange={(e) => setNewTagName(e.target.value)}
-                  placeholder="Tag name..."
-                  className="flex-1 px-4 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm"
+                  placeholder="标签名称..."
+                  className="flex-1 px-3.5 py-2 bg-zinc-900 border border-zinc-750 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 text-xs text-zinc-100 placeholder-zinc-500 font-medium"
                   onKeyDown={(e) => e.key === 'Enter' && handleCreateTag()}
                 />
                 <button
                   onClick={handleCreateTag}
                   disabled={isLoading || !newTagName.trim()}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all font-semibold text-sm shadow-md shadow-blue-500/20 active:scale-95"
+                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 rounded-xl hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-black text-xs shadow-md shadow-amber-500/20 active:scale-95 flex items-center gap-1.5"
                 >
-                  Add
+                  <IconPlus className="w-3.5 h-3.5" />
+                  <span>添加</span>
                 </button>
               </div>
               <ColorPicker 
                 selectedColor={newTagColor} 
                 onChange={setNewTagColor}
-                className="pt-2"
+                className="pt-1"
               />
             </div>
           </section>
 
           {/* Tag List */}
-          <section className="space-y-4">
-            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
-              Existing Tags ({tags.length})
+          <section className="space-y-3">
+            <h3 className="text-xs font-black text-zinc-400 uppercase tracking-widest">
+              已有标签 ({tags.length})
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {tags.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 italic text-sm border-2 border-dashed border-slate-100 rounded-xl">
-                  No tags created yet
+                <div className="text-center py-8 text-zinc-500 text-xs border border-dashed border-zinc-800 rounded-xl">
+                  暂无自定义标签
                 </div>
               ) : (
                 tags.map((tag) => (
                   <div 
                     key={tag.id}
-                    className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:border-slate-200 hover:shadow-sm transition-all group"
+                    className="flex items-center justify-between p-3 bg-zinc-950/60 border border-zinc-800/80 rounded-xl hover:border-amber-500/40 transition-all group"
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       {editingTagId === tag.id ? (
-                        <div className="flex flex-col gap-3 w-full mr-4">
+                        <div className="flex flex-col gap-2 w-full mr-4">
                           <input
                             type="text"
                             value={editingTagName}
                             onChange={(e) => setEditingTagName(e.target.value)}
-                            className="w-full px-3 py-1.5 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            className="w-full px-3 py-1.5 bg-zinc-900 border border-zinc-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs text-zinc-100"
                             autoFocus
                             onKeyDown={(e) => e.key === 'Enter' && handleUpdateTag(tag.id)}
                           />
@@ -194,26 +199,26 @@ const TagManagerModal: React.FC<TagManagerModalProps> = ({
                             selectedColor={editingTagColor} 
                             onChange={setEditingTagColor}
                           />
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 pt-1">
                             <button
                               onClick={() => handleUpdateTag(tag.id)}
-                              className="text-xs bg-blue-600 text-white px-3 py-1 rounded-md font-medium"
+                              className="text-xs bg-amber-400 text-zinc-950 font-black px-3 py-1 rounded-lg active:scale-95 transition-all"
                             >
-                              Save
+                              保存
                             </button>
                             <button
                               onClick={() => setEditingTagId(null)}
-                              className="text-xs bg-slate-200 text-slate-600 px-3 py-1 rounded-md font-medium"
+                              className="text-xs bg-zinc-800 text-zinc-400 hover:text-zinc-200 px-3 py-1 rounded-lg active:scale-95 transition-all"
                             >
-                              Cancel
+                              取消
                             </button>
                           </div>
                         </div>
                       ) : (
                         <>
                           <TagBadge name={tag.name} color={tag.color} variant="soft" />
-                          <span className="text-xs text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full font-medium">
-                            {tag.taskCount || 0} tasks
+                          <span className="text-[10px] text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full font-bold">
+                            {tag.taskCount || 0} 模块
                           </span>
                         </>
                       )}
@@ -223,21 +228,17 @@ const TagManagerModal: React.FC<TagManagerModalProps> = ({
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => startEditing(tag)}
-                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edit Tag"
+                          className="p-1.5 text-zinc-400 hover:text-amber-300 hover:bg-zinc-800 rounded-lg transition-colors active:scale-95"
+                          title="编辑标签"
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
+                          <IconEdit className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleDeleteTag(tag.id)}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Delete Tag"
+                          className="p-1.5 text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 rounded-lg transition-colors active:scale-95"
+                          title="删除标签"
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
+                          <IconTrash className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     )}
@@ -249,12 +250,12 @@ const TagManagerModal: React.FC<TagManagerModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+        <div className="px-6 py-4 bg-zinc-950/60 border-t border-zinc-800 flex justify-end">
           <button
             onClick={onClose}
-            className="px-6 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-semibold text-sm shadow-sm active:scale-95"
+            className="px-5 py-2 bg-zinc-800 text-zinc-300 hover:bg-zinc-750 hover:text-zinc-100 rounded-xl transition-all font-bold text-xs active:scale-95"
           >
-            Close
+            关闭
           </button>
         </div>
       </div>

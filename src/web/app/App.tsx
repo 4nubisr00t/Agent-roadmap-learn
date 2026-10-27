@@ -11,6 +11,32 @@ import { AISettingsModal } from './components/modals/AISettingsModal.js';
 import { DocumentManagerModal } from './components/modals/DocumentManagerModal.js';
 import { AIRoadmapGeneratorModal } from './components/modals/AIRoadmapGeneratorModal.js';
 import { TaskAIChat } from './components/TaskAIChat.js';
+import {
+  IconLightning,
+  IconTree,
+  IconKanban,
+  IconSearch,
+  IconUser,
+  IconLock,
+  IconLogout,
+  IconBook,
+  IconSettings,
+  IconPlus,
+  IconTrash,
+  IconEdit,
+  IconPin,
+  IconCheck,
+  IconClose,
+  IconChevronRight,
+  IconChevronLeft,
+  IconSparkles,
+  IconFileText,
+  IconUpload,
+  IconFlame,
+  IconLayers,
+  IconRefresh,
+  IconClock,
+} from './components/Icons.js';
 
 interface Project {
   id: string;
@@ -88,17 +114,17 @@ function normalizeStatus(status: string): TaskStatus {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
-  todo: { label: 'TODO', color: 'text-slate-600', bgColor: 'bg-slate-100' },
-  'in-progress': { label: 'In Progress', color: 'text-blue-600', bgColor: 'bg-blue-50' },
-  review: { label: 'Review', color: 'text-amber-600', bgColor: 'bg-amber-50' },
-  done: { label: 'Done', color: 'text-emerald-600', bgColor: 'bg-emerald-50' },
+  todo: { label: '待补齐', color: 'text-zinc-400', bgColor: 'bg-zinc-800/80 border border-zinc-700/60' },
+  'in-progress': { label: '攻克中', color: 'text-amber-400', bgColor: 'bg-amber-500/15 border border-amber-500/30' },
+  review: { label: '考核中', color: 'text-yellow-300', bgColor: 'bg-yellow-500/15 border border-yellow-500/30' },
+  done: { label: '已掌握', color: 'text-amber-300 font-black', bgColor: 'bg-amber-500/20 border border-amber-400/50' },
 };
 
 const PRIORITY_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
-  critical: { label: 'Critical', color: 'text-rose-700', bgColor: 'bg-rose-100' },
-  high: { label: 'High', color: 'text-amber-700', bgColor: 'bg-amber-100' },
-  medium: { label: 'Medium', color: 'text-blue-600', bgColor: 'bg-blue-50' },
-  low: { label: 'Low', color: 'text-emerald-600', bgColor: 'bg-emerald-50' },
+  critical: { label: '核心必备', color: 'text-rose-400', bgColor: 'bg-rose-500/15 border border-rose-500/30' },
+  high: { label: '深度推荐', color: 'text-amber-400', bgColor: 'bg-amber-500/15 border border-amber-500/30' },
+  medium: { label: '标准基准', color: 'text-yellow-400', bgColor: 'bg-yellow-500/10 border border-yellow-500/20' },
+  low: { label: '拓展选修', color: 'text-zinc-400', bgColor: 'bg-zinc-800/60 border border-zinc-700/40' },
 };
 
 const KANBAN_COLUMNS: TaskStatus[] = ['todo', 'in-progress', 'review', 'done'];
@@ -1026,16 +1052,16 @@ const App: React.FC = () => {
         draggable
         onDragStart={(e) => handleDragStart(e, task.id)}
         onDragEnd={() => setDraggedTask(null)}
-        className={`bg-white rounded-2xl border border-slate-100/50 cursor-move transition-all duration-300 ease-out group flex flex-col ${
+        className={`bg-zinc-900/90 rounded-2xl border border-zinc-800/80 cursor-move transition-all duration-200 ease-out group flex flex-col hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/5 ${
           isDragging
-            ? 'shadow-2xl scale-105 border-emerald-400 rotate-1 z-10'
-            : 'shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:border-emerald-100'
+            ? 'shadow-2xl scale-105 border-amber-400 rotate-1 z-10'
+            : 'shadow-sm hover:-translate-y-0.5'
         } ${
           cardMode === 'compact' ? 'p-3' : 'p-5'
         }`}
       >
-        <div className={`flex justify-between items-start mb-1`}>
-          <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${priority.bgColor} ${priority.color} border border-current opacity-80`}>
+        <div className="flex justify-between items-start mb-1.5">
+          <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg ${priority.bgColor} ${priority.color}`}>
             {priority.label}
           </span>
           <div className={`relative flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all ${cardMode === 'compact' ? 'scale-90' : ''}`}>
@@ -1046,14 +1072,14 @@ const App: React.FC = () => {
                     e.stopPropagation();
                     setGraphPickerTaskId((current) => current === task.id ? null : task.id);
                   }}
-                  className={`text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-all font-black ${cardMode === 'compact' ? 'px-2 py-1 text-[10px]' : 'px-2.5 py-1.5 text-[11px]'}`}
+                  className={`text-zinc-400 hover:text-amber-300 hover:bg-zinc-800 rounded-lg transition-all font-black active:scale-95 ${cardMode === 'compact' ? 'px-2 py-1 text-[10px]' : 'px-2.5 py-1 text-[11px]'}`}
                   title="Add to Graph"
                 >
                   Graph
                 </button>
                 {graphPickerTaskId === task.id && (
-                  <div className="absolute right-0 top-9 z-20 w-52 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-                    <div className="px-2 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Add To Graph</div>
+                  <div className="absolute right-0 top-8 z-20 w-52 rounded-xl border border-zinc-700 bg-zinc-900 p-2 shadow-2xl">
+                    <div className="px-2 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Add To Graph</div>
                     <div className="mt-1 space-y-1">
                       {graphViews.map((graph) => (
                         <button
@@ -1062,10 +1088,10 @@ const App: React.FC = () => {
                             e.stopPropagation();
                             void handleAddTaskToGraph(task.id, project.id, graph.id);
                           }}
-                          className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-emerald-50"
+                          className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold text-zinc-300 hover:text-amber-300 transition hover:bg-zinc-800"
                         >
                           <span className="truncate pr-2">{graph.name}</span>
-                          <span className="text-[10px] text-slate-400">r{graph.revision}</span>
+                          <span className="text-[10px] text-zinc-500">r{graph.revision}</span>
                         </button>
                       ))}
                     </div>
@@ -1078,26 +1104,26 @@ const App: React.FC = () => {
                 e.stopPropagation();
                 handleEditTask(task);
               }}
-              className={`text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded transition-all ${cardMode === 'compact' ? 'p-1' : 'p-1.5'}`}
-              title="Edit"
+              className={`text-zinc-400 hover:text-amber-300 hover:bg-zinc-800 rounded-lg transition-all active:scale-95 ${cardMode === 'compact' ? 'p-1' : 'p-1.5'}`}
+              title="Edit Task"
             >
-              <svg className={cardMode === 'compact' ? 'w-3 h-3' : 'w-4 h-4'} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+              <IconEdit className={cardMode === 'compact' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
             </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 handleDeleteTask(task.id, project.id);
               }}
-              className={`text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition-all ${cardMode === 'compact' ? 'p-1' : 'p-1.5'}`}
-              title="Delete"
+              className={`text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 rounded-lg transition-all active:scale-95 ${cardMode === 'compact' ? 'p-1' : 'p-1.5'}`}
+              title="Delete Task"
             >
-              <svg className={cardMode === 'compact' ? 'w-3 h-3' : 'w-4 h-4'} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              <IconTrash className={cardMode === 'compact' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
             </button>
           </div>
         </div>
         <h3
           onClick={() => handleEditTask(task)}
-          className={`text-slate-800 font-bold cursor-pointer leading-tight hover:text-emerald-500 transition-colors line-clamp-2 ${cardMode === 'compact' ? 'text-sm' : 'text-base'}`}
+          className={`text-zinc-200 font-bold cursor-pointer leading-snug group-hover:text-amber-300 transition-colors line-clamp-2 ${cardMode === 'compact' ? 'text-xs' : 'text-sm'}`}
         >
           {task.title}
         </h3>
@@ -1119,18 +1145,18 @@ const App: React.FC = () => {
           </div>
         )}
 
-        <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-50">
-          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter truncate max-w-[100px]">{project.name}</span>
+        <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-zinc-800/80">
+          <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider truncate max-w-[100px]">{project.name}</span>
           {task.dueDate && (
-            <div className="flex items-center gap-1 text-[10px] text-slate-400 font-bold">
-              <span>📅</span>
+            <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-medium">
+              <IconClock className="w-3 h-3 text-amber-500/80" />
               <span>{new Date(task.dueDate).toLocaleDateString([], {month: 'short', day: 'numeric'})}</span>
             </div>
           )}
         </div>
 
         {cardMode === 'detailed' && task.description && (
-          <p className="text-xs text-slate-500 line-clamp-2 mt-3 leading-relaxed bg-slate-50/50 p-2 rounded-lg border border-slate-100/50">
+          <p className="text-xs text-zinc-400 line-clamp-2 mt-2 leading-relaxed bg-zinc-950/70 p-2.5 rounded-xl border border-zinc-800/80">
             {task.description}
           </p>
         )}
@@ -1144,77 +1170,77 @@ const App: React.FC = () => {
   const progressPercent = totalTasksCount > 0 ? Math.round((doneTasksCount / totalTasksCount) * 100) : 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50/30 to-blue-50/20 p-6">
-      <header className="mb-6 flex flex-wrap justify-between items-center gap-4 bg-white/80 backdrop-blur-md p-4 rounded-2xl border border-white/80 shadow-sm">
+    <div className="min-h-screen bg-transparent p-4 sm:p-6 text-zinc-100">
+      <header className="mb-6 flex flex-wrap justify-between items-center gap-4 bg-zinc-900/80 backdrop-blur-xl p-4 rounded-2xl border border-zinc-800 shadow-2xl">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white text-xl shadow-md shadow-emerald-500/20 font-black">
-            ⚡
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-zinc-950 text-xl shadow-lg shadow-amber-500/20 font-black">
+            <IconLightning className="w-5 h-5 text-zinc-950" />
           </div>
           <div>
-            <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              Agent<span className="text-emerald-500">Learn</span>
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+            <h1 className="text-xl font-black text-zinc-100 tracking-tight flex items-center gap-2">
+              Agent<span className="text-amber-400">Learn</span>
+              <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
                 模块化技能进阶
               </span>
             </h1>
-            <p className="text-xs text-slate-500 font-medium">Antigravity × Gemini 导师协同系统</p>
+            <p className="text-xs text-zinc-400 font-medium">Antigravity × Gemini 导师协同系统</p>
           </div>
         </div>
 
         {totalTasksCount > 0 && (
-          <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200/60">
+          <div className="flex items-center gap-4 bg-zinc-950/80 px-4 py-2 rounded-xl border border-zinc-800/80 shadow-inner">
             <div className="text-right">
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">技能补齐进度</div>
-              <div className="text-sm font-black text-slate-800">
-                {doneTasksCount} / {totalTasksCount} 模块 <span className="text-emerald-600 font-bold">({progressPercent}%)</span>
+              <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">技能补齐进度</div>
+              <div className="text-sm font-black text-zinc-200">
+                {doneTasksCount} / {totalTasksCount} 模块 <span className="text-amber-400 font-bold">({progressPercent}%)</span>
               </div>
             </div>
-            <div className="w-28 h-3 bg-slate-200 rounded-full overflow-hidden p-0.5">
+            <div className="w-28 h-2.5 bg-zinc-800 rounded-full overflow-hidden p-0.5">
               <div
-                className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-700 shadow-sm"
+                className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full transition-all duration-700 shadow-sm shadow-amber-500/30"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
           </div>
         )}
 
-        <div className="flex items-center gap-3">
-          <div className="flex bg-slate-200/60 rounded-xl p-1 shadow-inner">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-1 shadow-inner">
             <button
               type="button"
               onClick={() => setWorkspaceMode('dependency')}
               disabled={!selectedProject}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 active:scale-95 ${
                 workspaceMode === 'dependency'
-                  ? 'bg-white text-emerald-800 shadow-sm font-extrabold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-md font-black'
+                  : 'text-zinc-400 hover:text-zinc-200'
               } disabled:cursor-not-allowed disabled:opacity-40`}
             >
-              <span>🕸️</span>
+              <IconTree className="w-3.5 h-3.5" />
               <span>技能拓扑图 (Graph)</span>
             </button>
             <button
               type="button"
               onClick={() => setWorkspaceMode('kanban')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 active:scale-95 ${
                 workspaceMode === 'kanban'
-                  ? 'bg-white text-emerald-800 shadow-sm font-extrabold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-md font-black'
+                  : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <span>📋</span>
+              <IconKanban className="w-3.5 h-3.5" />
               <span>模块看板 (Kanban)</span>
             </button>
           </div>
 
-          <div className="flex bg-slate-200/50 rounded-xl p-1">
+          <div className="flex bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-1">
             <button
               type="button"
               onClick={() => setCardMode('compact')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${
                 cardMode === 'compact'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
+                  ? 'bg-zinc-800 text-amber-300 shadow-sm font-bold'
+                  : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
               紧凑
@@ -1222,10 +1248,10 @@ const App: React.FC = () => {
             <button
               type="button"
               onClick={() => setCardMode('detailed')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${
                 cardMode === 'detailed'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
+                  ? 'bg-zinc-800 text-amber-300 shadow-sm font-bold'
+                  : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
               详细
@@ -1233,7 +1259,7 @@ const App: React.FC = () => {
           </div>
           {tags.length > 0 && (
             <>
-              <div className="h-5 w-px bg-slate-300" />
+              <div className="h-5 w-px bg-zinc-800" />
                <TagFilter
                  tags={tagsWithTaskCounts}
                  selectedTags={selectedTagIds}
@@ -1241,62 +1267,63 @@ const App: React.FC = () => {
                />
             </>
           )}
-          <div className="h-5 w-px bg-slate-300" />
-          <div className="flex bg-slate-200/50 rounded-xl p-1">
+          <div className="h-5 w-px bg-zinc-800" />
+          <div className="flex bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-1">
             {(['all', 'active', 'completed'] as StatusFilter[]).map(f => (
                 <button
                   type="button"
                   key={f}
                 onClick={() => setStatusFilter(f)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all capitalize ${
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all capitalize active:scale-95 ${
                   statusFilter === f
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
+                    ? 'bg-zinc-800 text-amber-300 shadow-sm font-bold'
+                    : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
                 {f}
               </button>
             ))}
           </div>
-          <div className="h-5 w-px bg-slate-300" />
+          <div className="h-5 w-px bg-zinc-800" />
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+            <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
             <input
               ref={searchInputRef}
               type="text"
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder="Search..."
-              className="pl-8 pr-3 py-1.5 text-sm bg-white/50 border border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all w-40 shadow-inner"
+              placeholder="搜索学习模块..."
+              className="pl-8 pr-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all w-36 sm:w-44 shadow-inner"
             />
           </div>
-          <div className="h-5 w-px bg-slate-300" />
+          <div className="h-5 w-px bg-zinc-800" />
           {currentUser ? (
-            <div className="flex items-center gap-2 bg-white/90 border border-emerald-200/80 px-3 py-1.5 rounded-xl shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-xs font-black text-slate-800">
+            <div className="flex items-center gap-2 bg-zinc-950/90 border border-zinc-800 px-3 py-1.5 rounded-xl shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              <span className="text-xs font-black text-zinc-200">
                 {currentUser.username}
               </span>
               <button
                 type="button"
                 onClick={handleLogout}
                 title="退出登录"
-                className="text-slate-400 hover:text-rose-600 text-xs font-medium ml-1 transition-colors px-1 py-0.5 rounded hover:bg-rose-50"
+                className="text-zinc-400 hover:text-rose-400 text-xs font-medium ml-1 transition-colors px-1.5 py-0.5 rounded hover:bg-zinc-800 flex items-center gap-1 active:scale-95"
               >
-                退出
+                <IconLogout className="w-3 h-3" />
+                <span>退出</span>
               </button>
             </div>
           ) : (
             <button
               type="button"
               onClick={() => setIsAuthModalOpen(true)}
-              className="px-3.5 py-1.5 text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl shadow-sm shadow-emerald-500/20 active:scale-95 transition-all flex items-center gap-1.5"
+              className="px-3.5 py-1.5 text-xs font-black bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:brightness-105 text-zinc-950 rounded-xl shadow-md shadow-amber-500/10 active:scale-95 transition-all flex items-center gap-1.5"
             >
-              <span>🔐</span>
+              <IconLock className="w-3.5 h-3.5" />
               <span>登录 / 注册</span>
             </button>
           )}
-          <div className="h-5 w-px bg-slate-300" />
+          <div className="h-5 w-px bg-zinc-800" />
           <button
             type="button"
             onClick={() => {
@@ -1307,18 +1334,18 @@ const App: React.FC = () => {
               }
             }}
             title="管理与上传个人专属资料/电子书"
-            className="px-3 py-1.5 text-xs font-bold bg-white/90 hover:bg-white text-teal-700 border border-teal-200/80 hover:border-teal-300 rounded-xl shadow-sm hover:shadow transition-all flex items-center gap-1.5 active:scale-95"
+            className="px-3.5 py-1.5 text-xs font-bold bg-zinc-900/90 hover:bg-zinc-850 text-amber-300 border border-amber-500/30 hover:border-amber-500/60 rounded-xl shadow-sm transition-all flex items-center gap-1.5 active:scale-95"
           >
-            <span>📚</span>
+            <IconBook className="w-3.5 h-3.5 text-amber-400" />
             <span>我的资料库</span>
           </button>
           <button
             type="button"
             onClick={() => setIsAISettingsOpen(true)}
             title="配置大模型供应商与 API Key"
-            className="px-3 py-1.5 text-xs font-bold bg-white/90 hover:bg-white text-indigo-700 border border-indigo-200/80 hover:border-indigo-300 rounded-xl shadow-sm hover:shadow transition-all flex items-center gap-1.5 active:scale-95"
+            className="px-3.5 py-1.5 text-xs font-bold bg-zinc-900/90 hover:bg-zinc-850 text-zinc-300 border border-zinc-800 hover:border-zinc-700 rounded-xl shadow-sm transition-all flex items-center gap-1.5 active:scale-95"
           >
-            <span>🤖</span>
+            <IconSettings className="w-3.5 h-3.5 text-amber-400" />
             <span>AI 配置</span>
           </button>
         </div>
@@ -1326,20 +1353,20 @@ const App: React.FC = () => {
 
       <div className="flex min-h-0 flex-col gap-6 lg:h-[calc(100vh-10.5rem)] lg:flex-row">
         <aside
-          className={`flex min-h-0 flex-shrink-0 flex-col rounded-[28px] border border-white/60 bg-white/35 p-4 shadow-sm backdrop-blur-sm transition-all duration-300 lg:h-full ${
+          className={`flex min-h-0 flex-shrink-0 flex-col rounded-[28px] border border-zinc-800/80 bg-zinc-900/60 p-4 shadow-xl backdrop-blur-xl transition-all duration-300 lg:h-full ${
             isProjectSidebarCollapsed ? 'lg:w-24' : 'lg:w-60'
           }`}
         >
           <div className="flex justify-between items-center mb-6 gap-2">
-            {!isProjectSidebarCollapsed && <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">Projects</h2>}
+            {!isProjectSidebarCollapsed && <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-500">学习技能树</h2>}
             <div className="flex items-center gap-2 ml-auto">
               <button
                 type="button"
                 onClick={() => setIsProjectSidebarCollapsed((value) => !value)}
-                className="w-8 h-8 flex items-center justify-center rounded-full border border-white/70 bg-white text-slate-500 hover:text-slate-800 hover:shadow-sm transition-all"
-                title={isProjectSidebarCollapsed ? 'Expand project list' : 'Collapse project list'}
+                className="w-8 h-8 flex items-center justify-center rounded-full border border-zinc-800 bg-zinc-850 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 transition-all active:scale-95 shadow-sm"
+                title={isProjectSidebarCollapsed ? '展开技能树列表' : '收起技能树列表'}
               >
-                {isProjectSidebarCollapsed ? '→' : '←'}
+                {isProjectSidebarCollapsed ? <IconChevronRight className="w-3.5 h-3.5" /> : <IconChevronLeft className="w-3.5 h-3.5" />}
               </button>
               <button
                 type="button"
@@ -1351,17 +1378,18 @@ const App: React.FC = () => {
                     setIsAIGeneratorOpen(true);
                   }
                 }}
-                className="w-8 h-8 flex items-center justify-center bg-gradient-to-r from-teal-500 to-indigo-500 text-white rounded-full hover:from-teal-600 hover:to-indigo-600 transition-all shadow-md shadow-teal-500/20 active:scale-95"
+                className="w-8 h-8 flex items-center justify-center bg-gradient-to-tr from-amber-500 to-yellow-400 text-zinc-950 rounded-full hover:brightness-110 transition-all shadow-md shadow-amber-500/20 active:scale-95"
                 title="AI 基于资料/电子书一键建树"
               >
-                <span className="text-sm">✨</span>
+                <IconSparkles className="w-4 h-4 text-zinc-950" />
               </button>
               <button
+                type="button"
                 onClick={() => setIsCreateProjectOpen(true)}
-                className="w-8 h-8 flex items-center justify-center bg-emerald-500 text-white rounded-full hover:bg-emerald-600 transition-all shadow-md shadow-emerald-500/20 active:scale-95"
-                title="New Project"
+                className="w-8 h-8 flex items-center justify-center bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-amber-400 rounded-full transition-all shadow-sm active:scale-95"
+                title="新建技能树"
               >
-                <span className="text-lg">+</span>
+                <IconPlus className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -1370,14 +1398,14 @@ const App: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSelectedProject(null)}
-                className={`w-full rounded-xl transition-all duration-300 ${!selectedProject ? 'bg-white shadow-md ring-1 ring-slate-100 text-slate-900 font-bold' : 'text-slate-500 hover:bg-white/50 hover:text-slate-800'} ${
+                className={`w-full rounded-xl transition-all duration-200 active:scale-[0.98] ${!selectedProject ? 'bg-zinc-800/90 border border-amber-500/40 text-amber-300 font-bold shadow-md shadow-amber-500/5' : 'text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200 border border-transparent'} ${
                   isProjectSidebarCollapsed ? 'px-2 py-3 text-center' : 'text-left px-4 py-3'
                 }`}
-                title={isProjectSidebarCollapsed ? 'All Projects' : undefined}
+                title={isProjectSidebarCollapsed ? '全部路线' : undefined}
               >
                 <div className={`flex items-center ${isProjectSidebarCollapsed ? 'flex-col gap-1 justify-center' : 'justify-between'}`}>
-                  <span className={`${isProjectSidebarCollapsed ? 'text-[11px] uppercase tracking-widest' : ''}`}>All Projects</span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${!selectedProject ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                  <span className={`${isProjectSidebarCollapsed ? 'text-[11px] uppercase tracking-widest' : ''}`}>全部路线</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${!selectedProject ? 'bg-amber-400 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>
                     {projects.reduce((sum, p) => sum + p.taskCount, 0)}
                   </span>
                 </div>
@@ -1392,7 +1420,7 @@ const App: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setSelectedProject(pId)}
-                      className={`w-full rounded-xl transition-all duration-300 ${selectedProject === pId ? 'bg-white shadow-md ring-1 ring-slate-100 text-slate-900 font-bold' : 'text-slate-500 hover:bg-white/50 hover:text-slate-800'} ${
+                      className={`w-full rounded-xl transition-all duration-200 active:scale-[0.98] ${selectedProject === pId ? 'bg-zinc-800/90 border border-amber-500/40 text-amber-300 font-bold shadow-md shadow-amber-500/5' : 'text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200 border border-transparent'} ${
                         isProjectSidebarCollapsed ? 'px-2 py-3 text-center' : 'text-left px-4 py-3'
                       }`}
                       title={isProjectSidebarCollapsed ? pName : undefined}
@@ -1401,7 +1429,7 @@ const App: React.FC = () => {
                         <span className={`${isProjectSidebarCollapsed ? 'text-[11px] font-black uppercase tracking-widest' : 'truncate pr-6'}`}>
                           {isProjectSidebarCollapsed ? pName.slice(0, 2) : pName}
                         </span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${selectedProject === pId ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${selectedProject === pId ? 'bg-amber-400 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>
                           {p.taskCount || 0}
                         </span>
                       </div>
@@ -1413,10 +1441,10 @@ const App: React.FC = () => {
                           e.stopPropagation();
                           handleDeleteProject(pId);
                         }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                        title="Delete Project"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-zinc-800 rounded-lg opacity-0 group-hover:opacity-100 transition-all active:scale-90"
+                        title="删除技能树"
                       >
-                        ✕
+                        <IconClose className="w-3.5 h-3.5" />
                       </button>
                     )}
                   </div>
@@ -1424,38 +1452,38 @@ const App: React.FC = () => {
               })}
             </div>
           </div>
-          <div className="mt-6 border-t border-slate-200/50 pt-6 space-y-3">
+          <div className="mt-6 border-t border-zinc-800/80 pt-6 space-y-2">
             <button
               type="button"
               onClick={() => setIsTagManagerOpen(true)}
               disabled={!selectedProject}
-              className={`w-full flex items-center text-sm font-semibold text-slate-600 hover:bg-white/50 rounded-xl transition-all group disabled:opacity-40 disabled:cursor-not-allowed ${
-                isProjectSidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-3 px-4 py-3'
+              className={`w-full flex items-center text-xs font-bold text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 rounded-xl transition-all group disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] ${
+                isProjectSidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'
               }`}
-              title={isProjectSidebarCollapsed ? 'Manage Tags' : undefined}
+              title={isProjectSidebarCollapsed ? '标签管理' : undefined}
             >
-              <span className="text-lg group-hover:scale-125 transition-transform">🏷️</span>
-              {!isProjectSidebarCollapsed && <span>Manage Tags</span>}
+              <IconPin className="w-4 h-4 text-amber-400 flex-shrink-0" />
+              {!isProjectSidebarCollapsed && <span>标签管理</span>}
             </button>
             <button
               type="button"
               onClick={handleExport}
-              className={`w-full flex items-center text-sm font-semibold text-slate-600 hover:bg-white/50 rounded-xl transition-all ${
-                isProjectSidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-3 px-4 py-3'
+              className={`w-full flex items-center text-xs font-bold text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 rounded-xl transition-all active:scale-[0.98] ${
+                isProjectSidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'
               }`}
-              title="Export all data as JSON"
+              title="导出全部数据 (JSON)"
             >
-              <span className="text-lg">📥</span>
-              {!isProjectSidebarCollapsed && <span>Export Data</span>}
+              <IconUpload className="w-4 h-4 text-amber-400 rotate-180 flex-shrink-0" />
+              {!isProjectSidebarCollapsed && <span>导出数据</span>}
             </button>
             <label
-              className={`w-full flex items-center text-sm font-semibold text-slate-600 hover:bg-white/50 rounded-xl transition-all cursor-pointer ${
-                isProjectSidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-3 px-4 py-3'
+              className={`w-full flex items-center text-xs font-bold text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 rounded-xl transition-all cursor-pointer active:scale-[0.98] ${
+                isProjectSidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'
               }`}
-              title={isProjectSidebarCollapsed ? 'Import Data' : undefined}
+              title={isProjectSidebarCollapsed ? '导入备份数据' : undefined}
             >
-              <span className="text-lg">📤</span>
-              {!isProjectSidebarCollapsed && <span>Import Data</span>}
+              <IconUpload className="w-4 h-4 text-amber-400 flex-shrink-0" />
+              {!isProjectSidebarCollapsed && <span>导入数据</span>}
               <input
                 type="file"
                 accept=".json,application/json"
@@ -1473,18 +1501,18 @@ const App: React.FC = () => {
               href={appMeta.repositoryUrl}
               target="_blank"
               rel="noreferrer"
-              className={`w-full flex items-center text-sm font-semibold text-slate-500 hover:bg-white/50 rounded-xl transition-all ${
-                isProjectSidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-3 px-4 py-3'
+              className={`w-full flex items-center text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850 rounded-xl transition-all active:scale-[0.98] ${
+                isProjectSidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'
               }`}
-              title={isProjectSidebarCollapsed ? `GitHub · v${appMeta.version}` : 'Open GitHub repository'}
+              title={isProjectSidebarCollapsed ? `GitHub · v${appMeta.version}` : '访问 GitHub 仓库'}
             >
-              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 flex-shrink-0 fill-current text-slate-500">
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 flex-shrink-0 fill-current text-zinc-400">
                 <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.09 3.29 9.4 7.86 10.92.57.1.78-.25.78-.56 0-.27-.01-1.17-.02-2.13-3.2.7-3.88-1.36-3.88-1.36-.52-1.34-1.28-1.7-1.28-1.7-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.95.1-.75.4-1.25.72-1.54-2.56-.29-5.26-1.28-5.26-5.69 0-1.26.45-2.3 1.18-3.11-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.19A10.9 10.9 0 0 1 12 6.03c.97 0 1.95.13 2.87.38 2.18-1.5 3.14-1.19 3.14-1.19.63 1.58.24 2.75.12 3.04.74.81 1.18 1.85 1.18 3.11 0 4.42-2.71 5.39-5.29 5.67.41.36.78 1.08.78 2.18 0 1.58-.01 2.85-.01 3.24 0 .31.2.67.79.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z" />
               </svg>
               {!isProjectSidebarCollapsed && (
                 <span className="flex min-w-0 items-center justify-between gap-3 w-full">
                   <span className="truncate">GitHub</span>
-                  <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  <span className="rounded-full bg-zinc-800 border border-zinc-700/60 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-zinc-400">
                     v{appMeta.version}
                   </span>
                 </span>
@@ -1494,30 +1522,30 @@ const App: React.FC = () => {
         </aside>
 
         <main
-          className={`relative flex-1 min-h-0 lg:h-full ${isDraggingFile ? 'ring-2 ring-blue-400 ring-dashed bg-blue-50/30' : ''}`}
+          className={`relative flex-1 min-h-0 lg:h-full ${isDraggingFile ? 'ring-2 ring-amber-500 ring-dashed bg-amber-500/5' : ''}`}
           onDragOver={handleDragOverFile}
           onDragLeave={handleDragLeaveFile}
           onDrop={handleDropFile}
         >
           {isDraggingFile && (
-            <div className="absolute inset-0 bg-blue-100/80 flex items-center justify-center z-50 rounded-xl">
+            <div className="absolute inset-0 bg-zinc-950/90 backdrop-blur-sm border-2 border-dashed border-amber-500/60 flex items-center justify-center z-50 rounded-2xl">
               <div className="text-center">
-                <div className="text-4xl mb-2">📁</div>
-                <p className="text-lg font-medium text-blue-900">Drop backup file here</p>
-                <p className="text-sm text-blue-600">JSON files only</p>
+                <IconUpload className="w-12 h-12 text-amber-400 mx-auto mb-3 animate-bounce" />
+                <p className="text-base font-bold text-zinc-100">释放鼠标以导入备份文件</p>
+                <p className="text-xs text-zinc-400 mt-1">支持标准 JSON 备份档案</p>
               </div>
             </div>
           )}
           {importStatus && (
             <div
-              className={`absolute top-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 transition-all ${
-                importStatus.type === 'success' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+              className={`absolute top-4 right-4 px-4 py-3 rounded-xl shadow-2xl z-50 transition-all border ${
+                importStatus.type === 'success' ? 'bg-zinc-900 border-amber-500/40 text-amber-300' : 'bg-zinc-900 border-rose-500/40 text-rose-300'
               }`}
             >
               {importStatus.message}
               <button
                 onClick={() => setImportStatus(null)}
-                className="ml-3 text-sm font-medium hover:opacity-70"
+                className="ml-3 text-sm font-bold hover:opacity-70"
               >
                 ×
               </button>
@@ -1525,8 +1553,8 @@ const App: React.FC = () => {
           )}
           {workspaceMode === 'kanban' ? (
             <div className="flex h-full min-h-0 flex-col">
-              <div className="mb-4 text-xs font-bold text-slate-400">
-                {filteredTasks.length} {filteredTasks.length === 1 ? 'Task' : 'Tasks'}
+              <div className="mb-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                {filteredTasks.length} {filteredTasks.length === 1 ? '个知识模块' : '个知识模块'}
               </div>
 
               <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1539,18 +1567,18 @@ const App: React.FC = () => {
                       key={column}
                       className={`flex min-h-[420px] flex-col rounded-2xl p-4 transition-all duration-300 lg:h-full lg:min-h-0 ${
                         isDragOver 
-                          ? 'bg-emerald-100/50 ring-2 ring-emerald-400 shadow-lg scale-[1.02]' 
-                          : 'bg-white/30 backdrop-blur-[2px] border border-white/50 shadow-sm'
+                          ? 'bg-zinc-850/90 ring-2 ring-amber-500/60 shadow-2xl scale-[1.01]' 
+                          : 'bg-zinc-900/60 backdrop-blur-md border border-zinc-800/80 shadow-sm'
                       }`}
                       onDragOver={(e) => handleDragOver(e, column)}
                       onDragLeave={handleDragLeave}
                       onDrop={(e) => handleDrop(e, column)}
                     >
-                      <div className="flex items-center justify-between mb-6 px-1">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-2 h-6 rounded-full ${statusConfig.bgColor.replace('bg-', 'bg-')}`} style={{backgroundColor: statusConfig.color.includes('blue') ? '#3B82F6' : statusConfig.color.includes('amber') ? '#F59E0B' : statusConfig.color.includes('emerald') ? '#10B981' : '#64748B'}}></div>
-                          <h3 className="font-bold text-slate-800 tracking-tight">{statusConfig.label}</h3>
-                          <span className="text-[10px] font-bold bg-white/60 text-slate-500 px-2 py-0.5 rounded-full shadow-sm">
+                      <div className="flex items-center justify-between mb-4 px-1">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-2 h-5 rounded-full ${column === 'done' ? 'bg-amber-400' : column === 'in-progress' ? 'bg-amber-500' : column === 'review' ? 'bg-yellow-500' : 'bg-zinc-600'}`} />
+                          <h3 className="font-bold text-zinc-200 tracking-tight text-sm">{statusConfig.label}</h3>
+                          <span className="text-[10px] font-bold bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full border border-zinc-700/60 shadow-sm">
                             {columnTasks.length}
                           </span>
                         </div>
@@ -1561,9 +1589,10 @@ const App: React.FC = () => {
                             setNewTaskForm({ title: '', description: '', priority: 'medium', dueDate: '', showDueDate: false, tags: [] });
                             setIsCreateTaskModalOpen(true);
                           }}
-                          className="w-8 h-8 flex items-center justify-center text-emerald-500 hover:text-emerald-600 hover:bg-white rounded-xl transition-all shadow-sm hover:shadow-md active:scale-90"
+                          className="w-7 h-7 flex items-center justify-center text-amber-400 hover:text-amber-300 hover:bg-zinc-800 border border-transparent hover:border-zinc-700 rounded-xl transition-all shadow-sm active:scale-90"
+                          title="添加新模块"
                         >
-                          <span className="text-xl font-bold">+</span>
+                          <IconPlus className="w-4 h-4" />
                         </button>
                       </div>
 
@@ -1620,7 +1649,7 @@ const App: React.FC = () => {
 
       {isEditModalOpen && editingTask && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fadeIn"
+          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setIsEditModalOpen(false);
@@ -1628,19 +1657,19 @@ const App: React.FC = () => {
             }
           }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-slideUp border border-slate-100">
+          <div className="bg-zinc-900/95 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-slideUp border border-zinc-700/80 text-zinc-100">
             {/* Modal Header */}
-            <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between gap-4 bg-slate-50/70">
+            <div className="p-5 sm:p-6 border-b border-zinc-800 flex items-center justify-between gap-4 bg-zinc-950/70">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  <span className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${STATUS_CONFIG[editingTask.status]?.bgColor} ${STATUS_CONFIG[editingTask.status]?.color}`}>
                     {STATUS_CONFIG[editingTask.status]?.label || editingTask.status}
                   </span>
-                  <span className="text-[11px] font-bold text-slate-500">
+                  <span className="text-[11px] font-bold text-zinc-400">
                     {PRIORITY_CONFIG[editingTask.priority]?.label || editingTask.priority}
                   </span>
                 </div>
-                <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight truncate">
+                <h2 className="text-lg sm:text-xl font-black text-zinc-100 tracking-tight truncate">
                   {editingTask.title}
                 </h2>
               </div>
@@ -1649,10 +1678,10 @@ const App: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleExportSingleNote(editingTask)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-850 text-amber-300 hover:text-amber-200 hover:bg-zinc-800 border border-amber-500/30 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95"
                   title="导出本节讲义与笔记为 Markdown 文件"
                 >
-                  <span>📥</span>
+                  <IconUpload className="w-3.5 h-3.5 rotate-180" />
                   <span>导出笔记 (.md)</span>
                 </button>
                 <button
@@ -1661,67 +1690,67 @@ const App: React.FC = () => {
                     setIsEditModalOpen(false);
                     setEditingTask(null);
                   }}
-                  className="w-8 h-8 rounded-full bg-slate-200/60 text-slate-500 hover:text-slate-800 hover:bg-slate-200 flex items-center justify-center font-bold"
+                  className="w-8 h-8 rounded-full bg-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-750 flex items-center justify-center font-bold active:scale-95 transition-all"
                 >
-                  ✕
+                  <IconClose className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
             {/* Navigation Tabs */}
-            <div className="flex items-center gap-2 px-6 pt-3 pb-2 border-b border-slate-100 bg-white">
+            <div className="flex items-center gap-2 px-6 pt-3 pb-2 border-b border-zinc-800 bg-zinc-950/50">
               <button
                 type="button"
                 onClick={() => setModalActiveTab('courseware')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 active:scale-95 ${
                   modalActiveTab === 'courseware'
-                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/20'
-                    : 'text-slate-600 hover:bg-slate-100'
+                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-md font-black'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
                 }`}
               >
-                <span>📖</span>
-                <span>课程全解讲义</span>
+                <IconFileText className="w-3.5 h-3.5" />
+                <span>课程讲义</span>
               </button>
               <button
                 type="button"
                 onClick={() => setModalActiveTab('notes')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 active:scale-95 ${
                   modalActiveTab === 'notes'
-                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/20'
-                    : 'text-slate-600 hover:bg-slate-100'
+                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-md font-black'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
                 }`}
               >
-                <span>✏️</span>
-                <span>自定义笔记与修改</span>
+                <IconEdit className="w-3.5 h-3.5" />
+                <span>讲义与笔记</span>
               </button>
               <button
                 type="button"
                 onClick={() => setModalActiveTab('gemini')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 active:scale-95 ${
                   modalActiveTab === 'gemini'
-                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
-                    : 'text-slate-600 hover:bg-slate-100'
+                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-md font-black'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
                 }`}
               >
-                <span>🤖</span>
-                <span>AI 导师伴学 (实时问答)</span>
+                <IconAI className="w-3.5 h-3.5" />
+                <span>AI 导师伴学</span>
               </button>
               <button
                 type="button"
                 onClick={() => setModalActiveTab('annotations')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 active:scale-95 ${
                   modalActiveTab === 'annotations'
-                    ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/20'
-                    : 'text-slate-600 hover:bg-slate-100'
+                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-md font-black'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
                 }`}
               >
-                <span>📌</span>
-                <span>我的批注与疑问 ({annotations.filter(a => a.taskId === editingTask.id).length})</span>
+                <IconPin className="w-3.5 h-3.5" />
+                <span>划词批注疑问 ({annotations.filter(a => a.taskId === editingTask.id).length})</span>
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 overflow-y-auto flex-1 min-h-0 bg-white">
+            <div className="p-6 overflow-y-auto flex-1 min-h-0 bg-zinc-950/30 text-zinc-200">
               {modalActiveTab === 'courseware' && (
                 <div className="relative">
                   {selectedHighlight && !isAnnotationModalOpen && (
@@ -1742,9 +1771,9 @@ const App: React.FC = () => {
                           e.stopPropagation();
                           setIsAnnotationModalOpen(true);
                         }}
-                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 text-amber-300 hover:text-white hover:bg-amber-600 rounded-full text-xs font-black shadow-2xl border border-amber-400/40 transition-all cursor-pointer active:scale-95"
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-zinc-950 text-amber-300 hover:text-zinc-950 hover:bg-amber-400 rounded-full text-xs font-black shadow-2xl border border-amber-400/50 transition-all cursor-pointer active:scale-95"
                       >
-                        <span>💬</span>
+                        <IconPin className="w-3.5 h-3.5" />
                         <span>划词批注 / 提问</span>
                       </button>
                     </div>
@@ -1752,7 +1781,7 @@ const App: React.FC = () => {
 
                   <div
                     onMouseUp={handleCoursewareMouseUp}
-                    className="courseware-content max-w-none text-slate-800 leading-relaxed select-text cursor-text"
+                    className="courseware-content max-w-none text-zinc-200 leading-relaxed select-text cursor-text"
                     dangerouslySetInnerHTML={{ __html: marked.parse(editingTask.description || '*暂无讲义内容*') }}
                   />
                 </div>
@@ -1760,14 +1789,14 @@ const App: React.FC = () => {
 
               {modalActiveTab === 'annotations' && (
                 <div className="space-y-4">
-                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between gap-4">
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-4">
                     <div>
-                      <h3 className="text-sm font-black text-amber-900 flex items-center gap-2">
-                        <span>📌</span>
+                      <h3 className="text-sm font-black text-amber-300 flex items-center gap-2">
+                        <IconPin className="w-4 h-4 text-amber-400" />
                         <span>本模块划词批注与待答疑问</span>
                       </h3>
-                      <p className="text-xs text-amber-700 mt-1">
-                        你在讲义中划选打上的所有批注已自动实时同步给本地文件。下次在 Antigravity 中只要发话呼叫 Gemini，即可获取逐句攻坚解答！
+                      <p className="text-xs text-amber-200/80 mt-1">
+                        你在讲义中划选打上的所有批注已自动实时同步给本地文件。下次在 Antigravity 中只要发话呼叫导师，即可获取逐句攻坚解答！
                       </p>
                     </div>
                     <button
@@ -1781,46 +1810,47 @@ const App: React.FC = () => {
                         const prompt = `Gemini老师，我在【${editingTask.title}】的讲义中做了以下几条批注和提问，请帮我逐条攻坚解答：\n\n` +
                           moduleAnnotations.map((a, i) => `${i + 1}. 原文引用：【${a.selectedText}】\n   我的疑问：${a.comment}`).join('\n\n');
                         navigator.clipboard.writeText(prompt);
-                        alert('已成功将全部批注提问复制到剪贴板！可以直接在聊天框粘贴发送给 Gemini！');
+                        alert('已成功将全部批注提问复制到剪贴板！可以直接在聊天框粘贴发送给导师！');
                       }}
-                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1 flex-shrink-0"
+                      className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 rounded-xl text-xs font-black transition-all shadow-sm flex items-center gap-1.5 flex-shrink-0 active:scale-95"
                     >
-                      <span>📋</span>
+                      <IconBook className="w-3.5 h-3.5" />
                       <span>一键复制所有批注提问</span>
                     </button>
                   </div>
 
                   {annotations.filter(a => a.taskId === editingTask.id).length === 0 ? (
-                    <div className="text-center py-12 text-slate-400">
-                      <div className="text-4xl mb-2">💡</div>
-                      <p className="text-sm font-medium">当前模块暂无批注</p>
-                      <p className="text-xs text-slate-400 mt-1">回到「课程全解讲义」选项卡，用鼠标划选任何不懂的句子即可随时弹出批注提问！</p>
+                    <div className="text-center py-12 text-zinc-500">
+                      <IconPin className="w-10 h-10 text-zinc-600 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm font-medium text-zinc-400">当前模块暂无批注</p>
+                      <p className="text-xs text-zinc-500 mt-1">回到「课程讲义」选项卡，用鼠标划选任何不懂的句子即可随时弹出批注提问！</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
                       {annotations.filter(a => a.taskId === editingTask.id).map((ann, idx) => (
-                        <div key={ann.id} className="p-4 rounded-xl border border-slate-200 bg-white hover:border-amber-300 transition-all shadow-sm">
+                        <div key={ann.id} className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/80 hover:border-amber-500/40 transition-all shadow-sm">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-black text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full">
+                            <span className="text-xs font-black text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
                               批注疑问 #{idx + 1}
                             </span>
                             <div className="flex items-center gap-2">
-                              <span className="text-[11px] text-slate-400">{ann.createdAt}</span>
+                              <span className="text-[11px] text-zinc-500">{ann.createdAt}</span>
                               <button
                                 type="button"
                                 onClick={() => handleDeleteAnnotation(ann.id)}
-                                className="text-xs text-slate-400 hover:text-red-500 font-bold px-2 py-0.5 rounded hover:bg-red-50"
+                                className="text-xs text-zinc-500 hover:text-rose-400 font-bold px-2 py-0.5 rounded hover:bg-zinc-800 flex items-center gap-1 transition-colors active:scale-95"
                                 title="删除此条批注"
                               >
-                                ✕ 删除
+                                <IconTrash className="w-3 h-3" />
+                                <span>删除</span>
                               </button>
                             </div>
                           </div>
-                          <div className="p-3 bg-slate-50 border-l-4 border-amber-400 rounded-r-lg mb-2.5 text-xs font-mono text-slate-700 select-all leading-relaxed">
+                          <div className="p-3 bg-zinc-950 border-l-4 border-amber-400 rounded-r-lg mb-2.5 text-xs font-mono text-zinc-300 select-all leading-relaxed">
                             “{ann.selectedText}”
                           </div>
-                          <div className="text-sm font-bold text-slate-900 flex items-start gap-2">
-                            <span className="text-amber-500 flex-shrink-0">❓</span>
+                          <div className="text-sm font-bold text-zinc-100 flex items-start gap-2">
+                            <span className="text-amber-400 font-black flex-shrink-0">Q:</span>
                             <span>{ann.comment}</span>
                           </div>
                         </div>
@@ -1833,48 +1863,48 @@ const App: React.FC = () => {
               {modalActiveTab === 'notes' && (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">模块名称</label>
+                    <label className="block text-xs font-bold text-zinc-300 mb-1">模块名称</label>
                     <input
                       type="text"
                       value={editingTask.title}
                       onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      className="w-full px-3.5 py-2 text-sm bg-zinc-950 border border-zinc-800 text-zinc-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 font-medium"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">讲义与 Markdown 笔记内容</label>
+                    <label className="block text-xs font-bold text-zinc-300 mb-1">讲义与 Markdown 笔记内容</label>
                     <textarea
                       value={editingTask.description || ''}
                       onChange={(e) => setEditingTask({ ...editingTask, description: e.target.value })}
                       rows={14}
-                      className="w-full px-3.5 py-2.5 text-xs font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 leading-relaxed"
+                      className="w-full px-3.5 py-2.5 text-xs font-mono bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 leading-relaxed"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">掌握状态</label>
+                      <label className="block text-xs font-bold text-zinc-300 mb-1">掌握状态</label>
                       <select
                         value={editingTask.status}
                         onChange={(e) => setEditingTask({ ...editingTask, status: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                        className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 text-zinc-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 font-bold"
                       >
-                        <option value="todo">🔒 待学习 / 待补齐</option>
-                        <option value="in-progress">⚡ 攻克中 (In Progress)</option>
-                        <option value="review">📝 考核中 (Review)</option>
-                        <option value="done">🟢 已掌握点亮 (Done)</option>
+                        <option value="todo">待学习 / 待补齐</option>
+                        <option value="in-progress">攻克中 (In Progress)</option>
+                        <option value="review">考核中 (Review)</option>
+                        <option value="done">已掌握点亮 (Done)</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">重要优先级</label>
+                      <label className="block text-xs font-bold text-zinc-300 mb-1">重要优先级</label>
                       <select
                         value={editingTask.priority}
                         onChange={(e) => setEditingTask({ ...editingTask, priority: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                        className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 text-zinc-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 font-medium"
                       >
-                        <option value="critical">🔥 核心必备 (Critical)</option>
-                        <option value="high">⭐ 高度推荐 (High)</option>
-                        <option value="medium">🔹 标准模块 (Medium)</option>
-                        <option value="low">🌱 选学扩展 (Low)</option>
+                        <option value="critical">核心必备 (Critical)</option>
+                        <option value="high">高度推荐 (High)</option>
+                        <option value="medium">标准模块 (Medium)</option>
+                        <option value="low">选学扩展 (Low)</option>
                       </select>
                     </div>
                   </div>
@@ -1892,9 +1922,10 @@ const App: React.FC = () => {
                   />
 
                   {/* Fallback prompt copy card for Antigravity Agent interaction */}
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/60">
-                    <div className="text-[11px] font-bold text-slate-500 mb-2 flex items-center justify-between">
-                      <span>📋 或复制 Prompt 到本地 Antigravity 聊天窗口提问：</span>
+                  <div className="p-4 bg-zinc-950/80 rounded-xl border border-zinc-800">
+                    <div className="text-[11px] font-bold text-zinc-400 mb-2 flex items-center gap-1.5">
+                      <IconSparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>或复制 Prompt 到本地 Antigravity 聊天窗口提问：</span>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button
@@ -1903,9 +1934,10 @@ const App: React.FC = () => {
                           navigator.clipboard.writeText(`Gemini老师，我想学【${editingTask.title}】，请用通俗易懂的生活例子给我讲透它的核心原理和代码逻辑！`);
                           alert('已复制！切回 Antigravity 聊天窗口粘贴发送即可。');
                         }}
-                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 shadow-sm transition-all"
+                        className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 rounded-lg border border-zinc-800 text-xs font-semibold text-zinc-300 hover:text-amber-300 shadow-sm transition-all active:scale-95 flex items-center gap-1.5"
                       >
-                        📖 讲透核心原理 Prompt
+                        <IconFileText className="w-3 h-3 text-amber-400" />
+                        <span>讲透核心原理 Prompt</span>
                       </button>
                       <button
                         type="button"
@@ -1913,9 +1945,10 @@ const App: React.FC = () => {
                           navigator.clipboard.writeText(`Gemini老师，我已经学习了【${editingTask.title}】，请出一道带代码或场景的填空测试题考考我，我答对后再帮我点亮！`);
                           alert('已复制！切回 Antigravity 聊天窗口粘贴发送即可。');
                         }}
-                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 shadow-sm transition-all"
+                        className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 rounded-lg border border-zinc-800 text-xs font-semibold text-zinc-300 hover:text-amber-300 shadow-sm transition-all active:scale-95 flex items-center gap-1.5"
                       >
-                        🎯 实战考核题 Prompt
+                        <IconSparkles className="w-3 h-3 text-amber-400" />
+                        <span>实战考核题 Prompt</span>
                       </button>
                       <button
                         type="button"
@@ -1923,9 +1956,10 @@ const App: React.FC = () => {
                           navigator.clipboard.writeText(`Gemini老师，我已经通过了【${editingTask.title}】的实战练习，请帮我验收并点亮该模块！`);
                           alert('已复制！切回 Antigravity 聊天窗口粘贴发送即可。');
                         }}
-                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 shadow-sm transition-all"
+                        className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 rounded-lg border border-zinc-800 text-xs font-semibold text-zinc-300 hover:text-amber-300 shadow-sm transition-all active:scale-95 flex items-center gap-1.5"
                       >
-                        ✨ 申请点亮模块 Prompt
+                        <IconCheck className="w-3 h-3 text-amber-400" />
+                        <span>申请点亮模块 Prompt</span>
                       </button>
                     </div>
                   </div>
@@ -1934,29 +1968,31 @@ const App: React.FC = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 sm:p-5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/80">
+            <div className="p-4 sm:p-5 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-3 bg-zinc-950/80">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => handleQuickSetStatus(editingTask.id, 'done')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all shadow-sm active:scale-95 flex items-center gap-1.5 ${
                     editingTask.status === 'done'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-white text-emerald-700 hover:bg-emerald-50 border border-emerald-200'
+                      ? 'bg-amber-400 text-zinc-950 shadow-md shadow-amber-400/20'
+                      : 'bg-zinc-850 text-amber-300 hover:bg-zinc-800 border border-amber-500/30'
                   }`}
                 >
-                  🟢 点亮此模块 (已掌握)
+                  <IconCheck className="w-4 h-4" />
+                  <span>点亮此模块 (已掌握)</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickSetStatus(editingTask.id, 'in-progress')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all shadow-sm active:scale-95 flex items-center gap-1.5 ${
                     editingTask.status === 'in-progress'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white text-blue-700 hover:bg-blue-50 border border-blue-200'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
+                      : 'bg-zinc-850 text-zinc-300 hover:bg-zinc-800 border border-zinc-700'
                   }`}
                 >
-                  ⚡ 设为攻克中
+                  <IconLightning className="w-3.5 h-3.5" />
+                  <span>设为攻克中</span>
                 </button>
               </div>
 
@@ -1965,7 +2001,7 @@ const App: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleSaveTask}
-                    className="px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl text-xs font-bold transition-all shadow-sm shadow-emerald-500/20"
+                    className="px-5 py-2 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-zinc-950 hover:brightness-105 rounded-xl text-xs font-black transition-all shadow-md shadow-amber-500/20 active:scale-95"
                   >
                     保存笔记与修改
                   </button>
@@ -1976,7 +2012,7 @@ const App: React.FC = () => {
                     setIsEditModalOpen(false);
                     setEditingTask(null);
                   }}
-                  className="px-4 py-2 bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-xl text-xs font-bold transition-all"
+                  className="px-4 py-2 bg-zinc-800 text-zinc-300 hover:bg-zinc-750 hover:text-zinc-100 rounded-xl text-xs font-bold transition-all active:scale-95"
                 >
                   关闭
                 </button>
@@ -1988,11 +2024,11 @@ const App: React.FC = () => {
 
       {/* Mini Dialog for Creating Annotation */}
       {isAnnotationModalOpen && selectedHighlight && editingTask && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 animate-slideUp border border-slate-200">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[10000] p-4 animate-fadeIn">
+          <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg p-6 animate-slideUp border border-zinc-750 text-zinc-100">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                <span className="text-amber-500">💬</span>
+              <h3 className="text-base font-black text-zinc-100 flex items-center gap-2">
+                <IconPin className="w-4 h-4 text-amber-400" />
                 <span>为划选文字添加批注 / 提问</span>
               </h3>
               <button
@@ -2001,21 +2037,21 @@ const App: React.FC = () => {
                   setIsAnnotationModalOpen(false);
                   setSelectedHighlight(null);
                 }}
-                className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center font-bold text-sm"
+                className="w-7 h-7 rounded-full bg-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 flex items-center justify-center font-bold text-sm active:scale-95 transition-all"
               >
-                ✕
+                <IconClose className="w-3.5 h-3.5" />
               </button>
             </div>
 
             <div className="mb-4">
-              <label className="block text-xs font-bold text-slate-500 mb-1">已划选原文引用：</label>
-              <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-xs font-mono text-slate-800 max-h-32 overflow-y-auto leading-relaxed">
+              <label className="block text-xs font-bold text-zinc-400 mb-1">已划选原文引用：</label>
+              <div className="p-3 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs font-mono text-amber-200/90 max-h-32 overflow-y-auto leading-relaxed border-l-4 border-l-amber-400">
                 “{selectedHighlight.text}”
               </div>
             </div>
 
             <div className="mb-5">
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-zinc-300 mb-1">
                 你的疑问或批注内容：
               </label>
               <textarea
@@ -2024,7 +2060,7 @@ const App: React.FC = () => {
                 placeholder="例如：为什么这里是覆盖 8 字节而不是 4 字节？请用通俗的语言解释底层原因..."
                 rows={4}
                 autoFocus
-                className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 leading-relaxed font-medium"
+                className="w-full px-3.5 py-2.5 text-sm bg-zinc-950 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 leading-relaxed font-medium text-zinc-100 placeholder-zinc-500"
               />
             </div>
 
@@ -2035,7 +2071,7 @@ const App: React.FC = () => {
                   setIsAnnotationModalOpen(false);
                   setSelectedHighlight(null);
                 }}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                className="px-4 py-2 text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-xl transition-all active:scale-95"
               >
                 取消
               </button>
@@ -2043,9 +2079,9 @@ const App: React.FC = () => {
                 type="button"
                 onClick={handleSaveAnnotation}
                 disabled={!annotationComment.trim()}
-                className="px-5 py-2 text-xs font-black text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-md shadow-amber-500/20 active:scale-95 flex items-center gap-1.5"
+                className="px-5 py-2 text-xs font-black text-zinc-950 bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-md shadow-amber-500/20 active:scale-95 flex items-center gap-1.5"
               >
-                <span>💾</span>
+                <IconCheck className="w-3.5 h-3.5" />
                 <span>保存并同步批注</span>
               </button>
             </div>
@@ -2055,66 +2091,76 @@ const App: React.FC = () => {
 
       {isCreateTaskModalOpen && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fadeIn"
+          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setIsCreateTaskModalOpen(false);
             }
           }}
         >
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg animate-slideUp">
-            <div className="p-6 border-b border-slate-100">
-              <h2 className="text-xl font-semibold text-slate-900">Create New Task</h2>
+          <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg animate-slideUp border border-zinc-750 text-zinc-100 overflow-hidden">
+            <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
+              <h2 className="text-lg font-black text-zinc-100 flex items-center gap-2">
+                <IconPlus className="w-4 h-4 text-amber-400" />
+                <span>创建知识模块</span>
+              </h2>
+              <button
+                type="button"
+                onClick={() => setIsCreateTaskModalOpen(false)}
+                className="w-7 h-7 rounded-full bg-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 flex items-center justify-center font-bold text-sm active:scale-95 transition-all"
+              >
+                <IconClose className="w-3.5 h-3.5" />
+              </button>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Title *</label>
+                <label className="block text-xs font-bold text-zinc-300 mb-1">模块名称 *</label>
                 <input
                   type="text"
                   value={newTaskForm.title}
                   onChange={(e) => setNewTaskForm({ ...newTaskForm, title: e.target.value })}
-                  placeholder="Enter task title"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="输入模块名称"
+                  className="w-full px-3.5 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 text-zinc-100 placeholder-zinc-500 font-medium"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                <label className="block text-xs font-bold text-zinc-300 mb-1">讲义与内容说明</label>
                 <textarea
                   value={newTaskForm.description}
                   onChange={(e) => setNewTaskForm({ ...newTaskForm, description: e.target.value })}
-                  placeholder="Enter task description (optional)"
+                  placeholder="输入模块详细讲义或 Markdown 笔记..."
                   rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className="w-full px-3.5 py-2 text-xs bg-zinc-950 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 resize-none text-zinc-200 placeholder-zinc-500 leading-relaxed"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
+                  <label className="block text-xs font-bold text-zinc-300 mb-1">重要优先级</label>
                   <select
                     value={newTaskForm.priority}
                     onChange={(e) => setNewTaskForm({ ...newTaskForm, priority: e.target.value as 'critical' | 'high' | 'medium' | 'low' })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 text-zinc-100 font-medium"
                   >
-                    <option value="critical">Critical</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
+                    <option value="critical">核心必备 (Critical)</option>
+                    <option value="high">深度推荐 (High)</option>
+                    <option value="medium">标准基准 (Medium)</option>
+                    <option value="low">拓展选修 (Low)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Due Date</label>
+                  <label className="block text-xs font-bold text-zinc-300 mb-1">截止日期</label>
                   <input
                     type="date"
                     value={newTaskForm.dueDate}
                     onChange={(e) => setNewTaskForm({ ...newTaskForm, dueDate: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 text-zinc-100"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Tags</label>
+                <label className="block text-xs font-bold text-zinc-300 mb-2">所属标签</label>
                 <TagSelector
                   tags={tags}
                   selectedTagIds={newTaskForm.tags}
@@ -2123,25 +2169,25 @@ const App: React.FC = () => {
               </div>
 
               {taskFormError && (
-                <p className="text-sm text-red-600">{taskFormError}</p>
+                <p className="text-xs text-rose-400 font-medium">{taskFormError}</p>
               )}
             </div>
-            <div className="p-6 border-t border-slate-100 flex justify-end gap-3">
+            <div className="p-6 border-t border-zinc-800 flex justify-end gap-3 bg-zinc-950/50">
               <button
                 onClick={() => {
                   setIsCreateTaskModalOpen(false);
                   setTaskFormError('');
                 }}
-                className="px-4 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                className="px-4 py-2 text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-xl transition-all active:scale-95"
               >
-                Cancel
+                取消
               </button>
               <button
                 onClick={handleCreateTask}
                 disabled={!newTaskForm.title.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors font-medium"
+                className="px-5 py-2 text-xs font-black bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 rounded-xl hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md shadow-amber-500/20 active:scale-95"
               >
-                Create Task
+                创建模块
               </button>
             </div>
           </div>
@@ -2150,79 +2196,82 @@ const App: React.FC = () => {
 
       {isCreateProjectOpen && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fadeIn"
+          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setIsCreateProjectOpen(false);
             }
           }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-slideUp border border-slate-100">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg animate-slideUp border border-zinc-750 text-zinc-100 overflow-hidden">
+            <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
               <div>
-                <span className="text-[11px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                <span className="text-[10px] font-black text-amber-300 bg-amber-500/15 px-2.5 py-0.5 rounded-full border border-amber-500/30 tracking-widest uppercase">
                   NEW WORKSPACE
                 </span>
-                <h2 className="text-lg font-black text-slate-900 mt-2">🌱 创建新的学习技能树</h2>
+                <h2 className="text-lg font-black text-zinc-100 mt-2 flex items-center gap-2">
+                  <IconTree className="w-5 h-5 text-amber-400" />
+                  <span>创建新的学习技能树</span>
+                </h2>
               </div>
               <button
                 type="button"
                 onClick={() => setIsCreateProjectOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center font-bold"
+                className="w-8 h-8 rounded-full bg-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 flex items-center justify-center font-bold active:scale-95 transition-all"
               >
-                ✕
+                <IconClose className="w-4 h-4" />
               </button>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">技能树名称 *</label>
+                <label className="block text-xs font-bold text-zinc-300 mb-1">技能树名称 *</label>
                 <input
                   type="text"
                   value={newProject.name}
                   onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
                   placeholder="例如：Pwn 二进制漏洞利用、Web渗透测试..."
-                  className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-medium"
+                  className="w-full px-3.5 py-2.5 text-sm bg-zinc-950 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 font-medium text-zinc-100 placeholder-zinc-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">学习目标与说明</label>
+                <label className="block text-xs font-bold text-zinc-300 mb-1">学习目标与说明</label>
                 <textarea
                   value={newProject.description}
                   onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                  placeholder="简要写写这个学习树的目标或涵盖的模块知识点..."
+                  placeholder="简要写写这个技能树的目标或涵盖的知识体系..."
                   rows={3}
-                  className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none leading-relaxed"
+                  className="w-full px-3.5 py-2 text-xs bg-zinc-950 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 resize-none leading-relaxed text-zinc-200 placeholder-zinc-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">视图类型</label>
+                  <label className="block text-xs font-bold text-zinc-300 mb-1">视图类型</label>
                   <select
                     value={newProject.projectType}
                     onChange={(e) => setNewProject({ ...newProject, projectType: e.target.value as any })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-bold text-slate-700"
+                    className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 font-bold text-zinc-200"
                   >
-                    <option value="skill-tree">🌟 技能树 (Skill Tree)</option>
-                    <option value="roadmap">📋 路线图 (Roadmap)</option>
-                    <option value="kanban">📊 看板 (Kanban)</option>
+                    <option value="skill-tree">技能树拓扑 (Skill Tree)</option>
+                    <option value="roadmap">阶段路线图 (Roadmap)</option>
+                    <option value="kanban">看板流 (Kanban)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">目标达成日期</label>
+                  <label className="block text-xs font-bold text-zinc-300 mb-1">目标达成日期</label>
                   <input
                     type="date"
                     value={newProject.targetDate}
                     onChange={(e) => setNewProject({ ...newProject, targetDate: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 text-zinc-100"
                   />
                 </div>
               </div>
             </div>
-            <div className="p-6 border-t border-slate-100 flex justify-end gap-3">
+            <div className="p-6 border-t border-zinc-800 flex justify-end gap-3 bg-zinc-950/50">
               <button
                 type="button"
                 onClick={() => setIsCreateProjectOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
+                className="px-4 py-2 text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-xl transition-all active:scale-95"
               >
                 取消
               </button>
@@ -2230,9 +2279,10 @@ const App: React.FC = () => {
                 type="button"
                 onClick={handleCreateProject}
                 disabled={!newProject.name.trim()}
-                className="px-5 py-2.5 text-xs font-bold bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-md shadow-emerald-500/20 active:scale-95"
+                className="px-5 py-2.5 text-xs font-black bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 rounded-xl hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md shadow-amber-500/20 active:scale-95 flex items-center gap-1.5"
               >
-                🚀 立即创建技能树
+                <IconLightning className="w-3.5 h-3.5 text-zinc-950" />
+                <span>立即创建技能树</span>
               </button>
             </div>
           </div>

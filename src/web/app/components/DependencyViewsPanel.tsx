@@ -26,6 +26,7 @@ import { toPng } from 'html-to-image';
 import { getItem, removeItem, setItem, STORAGE_KEYS } from '../utils/storage.js';
 import TagBadge from './TagBadge.js';
 import TagSelector from './TagSelector.js';
+import { IconTree, IconCheck, IconLightning, IconPlus, IconClose, IconChevronRight, IconChevronLeft } from './Icons.js';
 
 // ─── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -201,10 +202,10 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  'todo': { label: '待补齐', cls: 'bg-slate-100 text-slate-600' },
-  'in-progress': { label: '⚡ 攻克中', cls: 'bg-blue-100 text-blue-700 font-bold ring-1 ring-blue-300' },
-  'review': { label: '📝 考核中', cls: 'bg-amber-100 text-amber-700 font-bold ring-1 ring-amber-300' },
-  'done': { label: '🟢 已点亮', cls: 'bg-emerald-100 text-emerald-800 font-bold ring-1 ring-emerald-300' },
+  'todo': { label: '待补齐', cls: 'bg-zinc-800 text-zinc-300 border border-zinc-700/60' },
+  'in-progress': { label: '攻克中', cls: 'bg-amber-500/15 text-amber-300 font-bold border border-amber-500/30' },
+  'review': { label: '考核中', cls: 'bg-yellow-500/15 text-yellow-300 font-bold border border-yellow-500/30' },
+  'done': { label: '已点亮', cls: 'bg-amber-400 text-zinc-950 font-black shadow-sm' },
 };
 
 const STATUS_OPTIONS: TaskStatus[] = ['todo', 'in-progress', 'review', 'done'];
@@ -586,34 +587,33 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
   const isCompact = displayMode === 'compact';
   const readinessState = isDone ? 'done' : isReady ? 'ready' : 'blocked';
   const readinessBadge = isDone
-    ? { label: '已掌握点亮', cls: 'bg-emerald-100 text-emerald-800 font-bold ring-1 ring-emerald-300', iconCls: 'text-emerald-600' }
+    ? { label: '已掌握点亮', cls: 'bg-amber-400 text-zinc-950 font-black shadow-sm shadow-amber-400/20', iconCls: 'text-zinc-950' }
     : isReady
-      ? { label: '⚡ 推荐攻克', cls: 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-md shadow-blue-500/30 animate-pulse', iconCls: 'text-white/90' }
-      : { label: '🔒 需先掌握前置', cls: 'bg-slate-100 text-slate-500 ring-1 ring-slate-200 font-medium', iconCls: 'text-slate-400' };
+      ? { label: '推荐攻克', cls: 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black shadow-md shadow-amber-500/20 animate-pulse', iconCls: 'text-zinc-950' }
+      : { label: '需先掌握前置', cls: 'bg-zinc-800 text-zinc-400 border border-zinc-700 font-medium', iconCls: 'text-zinc-500' };
   const surfaceStyle = isDone
     ? {
         width: layout.nodeWidth,
-        border: `2px solid ${color}`,
-        boxShadow: `0 2px 10px ${color}18`,
-        background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-        opacity: 0.55,
+        border: `1.5px solid #d97706`,
+        boxShadow: `0 4px 14px rgba(245, 158, 11, 0.15)`,
+        background: 'linear-gradient(180deg, #18181b 0%, #09090b 100%)',
+        opacity: 0.85,
       }
     : isReady
       ? {
           width: layout.nodeWidth,
-          border: `2px solid ${color}`,
-          background: `linear-gradient(135deg, ${color}18 0%, #ffffff 34%, #f8fafc 100%)`,
-          boxShadow: `0 0 0 5px ${color}16, 0 18px 40px ${color}30`,
+          border: `2px solid #f59e0b`,
+          background: `linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, #18181b 40%, #09090b 100%)`,
+          boxShadow: `0 0 0 4px rgba(245, 158, 11, 0.15), 0 16px 36px rgba(0, 0, 0, 0.6)`,
           transform: 'translateY(-3px)',
         }
       : {
           width: layout.nodeWidth,
-          border: `2px solid ${color}70`,
-          background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-          boxShadow: '0 6px 18px rgba(15, 23, 42, 0.08)',
-           opacity: 0.92,
-           filter: 'saturate(0.85)',
-         };
+          border: `1px solid #27272a`,
+          background: 'linear-gradient(180deg, #18181b 0%, #09090b 100%)',
+          boxShadow: '0 6px 18px rgba(0, 0, 0, 0.4)',
+          opacity: 0.92,
+        };
 
   const updateMenuPosition = useCallback(() => {
     const button = statusButtonRef.current;
@@ -724,21 +724,21 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
   return (
     <>
       <div
-      className={`bg-white rounded-2xl ${readinessState === 'ready' ? 'dependency-ready-card' : ''}`}
-      style={surfaceStyle}
-    >
+        className={`bg-zinc-900 rounded-2xl text-zinc-100 ${readinessState === 'ready' ? 'dependency-ready-card' : ''}`}
+        style={surfaceStyle}
+      >
       <Handle
         type="target"
         position={Position.Left}
-        style={{ background: '#94a3b8', width: 10, height: 10, border: '2px solid white' }}
+        style={{ background: '#f59e0b', width: 10, height: 10, border: '2px solid #18181b' }}
       />
       {/* Priority / Status header */}
       <div
-        className="px-4 py-2.5"
+        className="px-4 py-2.5 rounded-t-2xl"
         style={{ backgroundColor: `${color}15` }}
       >
         <div className="flex items-start justify-between gap-3">
-          <span className="pt-1 text-[10px] font-black uppercase tracking-widest" style={{ color }}>
+          <span className="pt-0.5 text-[10px] font-black uppercase tracking-widest" style={{ color }}>
             {task.priority}
           </span>
           <div className="flex max-w-[70%] flex-wrap justify-end gap-1.5">
@@ -754,10 +754,10 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
               type="button"
               onClick={handleStatusToggle}
               disabled={isStatusUpdating}
-              className={`nodrag nopan inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold transition-all ${status.cls} ${isStatusUpdating ? 'cursor-wait opacity-70' : 'cursor-pointer hover:ring-2 hover:ring-slate-200'}`}
+              className={`nodrag nopan inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold transition-all ${status.cls} ${isStatusUpdating ? 'cursor-wait opacity-70' : 'cursor-pointer hover:brightness-125 active:scale-95'}`}
               aria-haspopup="menu"
               aria-expanded={isStatusMenuOpen}
-              title="Change task status"
+              title="修改掌握状态"
             >
               {status.label}
               <svg aria-hidden="true" className="h-3 w-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -769,13 +769,13 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
       </div>
       {/* Title + description */}
       <div
-        className="px-4 pt-2.5 pb-1 cursor-pointer hover:bg-slate-50/80 transition-colors rounded-xl"
+        className="px-4 pt-2.5 pb-1 cursor-pointer hover:bg-zinc-800/40 transition-colors rounded-xl"
         onClick={() => (data as any).onSelect?.()}
         title="点击查看课程详细讲义"
       >
-        <p className={`font-bold text-slate-800 leading-snug line-clamp-2 ${isCompact ? 'text-[13px]' : 'text-sm'}`}>{task.title}</p>
+        <p className={`font-bold text-zinc-100 leading-snug line-clamp-2 hover:text-amber-300 transition-colors ${isCompact ? 'text-[13px]' : 'text-sm'}`}>{task.title}</p>
         {!isCompact && task.description && (
-          <p className="text-xs text-slate-400 mt-1 line-clamp-2 leading-relaxed">{task.description}</p>
+          <p className="text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed">{task.description}</p>
         )}
         {!isCompact && task.tags.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
@@ -802,7 +802,7 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
       <div className={`px-4 pb-3 flex items-center justify-between ${isCompact ? 'mt-0.5' : 'mt-1'}`}>
         <button
           type="button"
-          className={`nodrag flex items-center gap-1 font-bold text-emerald-600 hover:text-white hover:bg-emerald-500 rounded-lg transition-all ${isCompact ? 'text-[11px] px-2 py-1' : 'text-xs px-2.5 py-1'}`}
+          className={`nodrag flex items-center gap-1 font-bold text-amber-400 hover:text-zinc-950 hover:bg-amber-400 rounded-lg transition-all active:scale-95 ${isCompact ? 'text-[11px] px-2 py-1' : 'text-xs px-2.5 py-1'}`}
           onClick={() => onAddNext(task.id)}
         >
           <span className="text-sm leading-none">+</span>
@@ -810,26 +810,24 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
         </button>
         <button
           type="button"
-          className="nodrag text-slate-300 hover:text-rose-500 hover:bg-rose-50 p-1 rounded-lg transition-all"
-          title="Remove from graph"
+          className="nodrag text-zinc-500 hover:text-rose-400 hover:bg-zinc-800 p-1.5 rounded-lg transition-all active:scale-90"
+          title="从拓扑图中移出"
           aria-label="Remove from graph"
           onClick={() => onRemove(task.id)}
         >
-          <svg aria-hidden="true" className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <IconClose className="w-3.5 h-3.5" />
         </button>
       </div>
       <Handle
         type="source"
         position={Position.Right}
-        style={{ background: '#10b981', width: 10, height: 10, border: '2px solid white' }}
+        style={{ background: '#f59e0b', width: 10, height: 10, border: '2px solid #18181b' }}
       />
       </div>
       {isStatusMenuOpen && menuStyle && createPortal(
         <div
           ref={statusMenuRef}
-          className="rounded-2xl border border-slate-200/90 bg-white/95 p-2 shadow-2xl backdrop-blur-md"
+          className="rounded-2xl border border-zinc-750 bg-zinc-900/95 p-2 shadow-2xl backdrop-blur-md text-zinc-100"
           style={{
             position: 'fixed',
             top: menuStyle.top,
@@ -838,7 +836,7 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
             zIndex: 80,
           }}
         >
-          <p className="px-2 pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Set Status</p>
+          <p className="px-2 pb-1 text-[10px] font-black uppercase tracking-widest text-zinc-500">修改掌握状态</p>
           <div className="space-y-1">
             {STATUS_OPTIONS.map((option) => {
               const optionConfig = STATUS_CONFIG[option];
@@ -849,13 +847,13 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
                   type="button"
                   onClick={() => void handleStatusSelect(option)}
                   disabled={isStatusUpdating}
-                  className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold transition-colors ${isCurrent ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-50'} disabled:cursor-wait disabled:opacity-60`}
+                  className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold transition-colors active:scale-95 ${isCurrent ? 'bg-amber-400 text-zinc-950 font-black' : 'text-zinc-300 hover:bg-zinc-800'} disabled:cursor-wait disabled:opacity-60`}
                 >
                   <span className="flex items-center gap-2">
                     <span className={`h-2.5 w-2.5 rounded-full ${optionConfig.cls}`} />
                     <span>{optionConfig.label}</span>
                   </span>
-                  {isCurrent && <span className="text-[10px] font-black uppercase tracking-wide">Current</span>}
+                  {isCurrent && <span className="text-[10px] font-black uppercase tracking-wide">当前</span>}
                 </button>
               );
             })}
@@ -1584,9 +1582,9 @@ export default function DependencyViewsPanel({
   if (!projectId) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="text-center text-slate-400">
-          <div className="text-5xl mb-4">🖥️</div>
-          <p className="font-semibold text-slate-500">Select a project to manage dependency graphs</p>
+        <div className="text-center text-zinc-500">
+          <IconTree className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
+          <p className="font-semibold text-zinc-400">请选择一个技能树以查看依赖拓扑</p>
         </div>
       </div>
     );
@@ -1597,16 +1595,16 @@ export default function DependencyViewsPanel({
 
       {/* Sidebar */}
       <aside
-        className={`flex-shrink-0 p-4 flex flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/45 shadow-sm backdrop-blur-sm transition-all duration-300 ${
+        className={`flex-shrink-0 p-4 flex flex-col overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/60 shadow-xl backdrop-blur-xl transition-all duration-300 ${
           isGraphListCollapsed ? 'w-20' : isCompact ? 'w-48' : 'w-56'
         }`}
       >
         <div className="flex items-center justify-between mb-4">
           {!isGraphListCollapsed && (
             <div className="min-w-0">
-              <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Graphs</h2>
+              <h2 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">拓扑图 (Graphs)</h2>
               {projectName && (
-                <p className="text-xs text-slate-600 font-semibold truncate mt-0.5">{projectName}</p>
+                <p className="text-xs text-zinc-300 font-semibold truncate mt-0.5">{projectName}</p>
               )}
             </div>
           )}
@@ -1614,29 +1612,31 @@ export default function DependencyViewsPanel({
             <button
               type="button"
               onClick={() => setIsGraphListCollapsed((value) => !value)}
-              className="w-8 h-8 flex items-center justify-center rounded-full border border-white/80 bg-white text-slate-500 hover:text-slate-800 hover:shadow-sm transition-all"
-              title={isGraphListCollapsed ? 'Expand graph list' : 'Collapse graph list'}
+              className="w-8 h-8 flex items-center justify-center rounded-full border border-zinc-800 bg-zinc-850 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 active:scale-95 transition-all shadow-sm"
+              title={isGraphListCollapsed ? '展开视图列表' : '收起视图列表'}
             >
-              {isGraphListCollapsed ? '→' : '←'}
+              {isGraphListCollapsed ? <IconChevronRight className="w-3.5 h-3.5" /> : <IconChevronLeft className="w-3.5 h-3.5" />}
             </button>
             <button
               type="button"
               onClick={() => setIsCreateGraphOpen(true)}
-              className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-emerald-500 text-white rounded-full hover:bg-emerald-600 active:scale-95 transition-all shadow-sm shadow-emerald-500/30 text-xl leading-none"
-              title="Create new graph"
-            >+</button>
+              className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 rounded-full hover:brightness-110 active:scale-95 transition-all shadow-md shadow-amber-500/20 text-xl leading-none"
+              title="创建新拓扑图"
+            >
+              <IconPlus className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
           <div className="space-y-1.5">
             {graphs.length === 0 ? (
-              <div className="py-10 text-center text-slate-400">
-                <div className="text-3xl mb-2">📊</div>
+              <div className="py-10 text-center text-zinc-500">
+                <IconTree className="w-8 h-8 text-zinc-600 mx-auto mb-2 opacity-50" />
                 {!isGraphListCollapsed && (
                   <>
-                    <p className="text-xs font-medium">No graphs yet</p>
-                    <p className="text-xs text-slate-300">Click + to create one</p>
+                    <p className="text-xs font-medium">暂无拓扑图</p>
+                    <p className="text-xs text-zinc-600">点击上方 + 号新建</p>
                   </>
                 )}
               </div>
@@ -1645,25 +1645,25 @@ export default function DependencyViewsPanel({
                 <button
                   type="button"
                   onClick={() => setSelectedGraphId(graph.id)}
-                  className={`w-full rounded-xl transition-all duration-300 ${
+                  className={`w-full rounded-xl transition-all duration-200 active:scale-[0.98] ${
                     selectedGraphId === graph.id
-                      ? 'bg-white shadow-md ring-1 ring-slate-100 text-slate-900 font-bold'
-                      : 'text-slate-500 hover:bg-white/50 hover:text-slate-800'
+                      ? 'bg-zinc-800/90 border border-amber-500/40 text-amber-300 font-bold shadow-md shadow-amber-500/5'
+                      : 'text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200 border border-transparent'
                   } ${isGraphListCollapsed ? 'px-2 py-3 text-center' : 'text-left px-3 py-2.5 text-sm'}`}
                   title={isGraphListCollapsed ? graph.name : undefined}
                 >
                   {isGraphListCollapsed ? (
                     <div className="flex flex-col items-center gap-1">
                       <span className="text-[11px] font-black uppercase tracking-widest">{graph.name.slice(0, 2)}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selectedGraphId === graph.id ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selectedGraphId === graph.id ? 'bg-amber-400 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>
                         {selectedGraphId === graph.id && currentView ? currentView.nodes.length : graph.nodeCount}n
                       </span>
                     </div>
                   ) : (
                     <>
                       <div className="truncate pr-5">{graph.name}</div>
-                      <div className={`text-[10px] mt-0.5 font-bold px-2 py-0.5 rounded-full inline-block ${selectedGraphId === graph.id ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                        {selectedGraphId === graph.id && currentView ? currentView.nodes.length : graph.nodeCount} nodes
+                      <div className={`text-[10px] mt-0.5 font-bold px-2 py-0.5 rounded-full inline-block ${selectedGraphId === graph.id ? 'bg-amber-400 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>
+                        {selectedGraphId === graph.id && currentView ? currentView.nodes.length : graph.nodeCount} 个节点
                       </div>
                     </>
                   )}
@@ -1672,13 +1672,11 @@ export default function DependencyViewsPanel({
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); void handleDeleteGraph(graph.id); }}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all rounded-lg hover:bg-rose-50"
-                    title="Delete graph"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 text-zinc-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-all rounded-lg hover:bg-zinc-800 active:scale-90"
+                    title="删除拓扑图"
                     aria-label="Delete graph"
                   >
-                    <svg aria-hidden="true" className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <IconClose className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
@@ -1688,19 +1686,19 @@ export default function DependencyViewsPanel({
       </aside>
 
       {/* Main Canvas */}
-      <div ref={reactFlowWrapperRef} className={`relative flex-1 overflow-hidden bg-slate-50 ${isCanvasFullscreen ? 'h-screen w-screen rounded-none border-0 shadow-none' : 'rounded-2xl border border-white/50 shadow-sm'}`}>
+      <div ref={reactFlowWrapperRef} className={`relative flex-1 overflow-hidden bg-zinc-950/60 ${isCanvasFullscreen ? 'h-screen w-screen rounded-none border-0 shadow-none' : 'rounded-2xl border border-zinc-800/80 shadow-inner'}`}>
         {!selectedGraphId ? (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center text-slate-400">
-              <div className="text-5xl mb-4">🗺️</div>
-              <p className="font-semibold text-slate-500">
-                {graphs.length === 0 ? 'Create a graph to get started' : 'Select a graph to view'}
+            <div className="text-center text-zinc-500">
+              <IconTree className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
+              <p className="font-semibold text-zinc-400">
+                {graphs.length === 0 ? '创建拓扑图以开始规划学习路径' : '选择左侧拓扑图以查看详情'}
               </p>
             </div>
           </div>
         ) : isLoading ? (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center text-slate-400">
+            <div className="text-center text-zinc-500">
               <div className="text-3xl mb-3 animate-spin">⟳</div>
               <p className="text-sm font-medium">Loading graph…</p>
             </div>
@@ -1708,7 +1706,7 @@ export default function DependencyViewsPanel({
         ) : (
           <>
             {/* Toolbar overlay */}
-             <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
+             <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md p-1 rounded-xl border border-zinc-800 shadow-xl">
                 <button
                   type="button"
                   onClick={() => {
@@ -1717,66 +1715,65 @@ export default function DependencyViewsPanel({
                     setHideCompletedInAdd(true);
                     setIsAddTaskOpen(true);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-emerald-200 hover:shadow-md text-xs font-bold text-slate-700 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-750 text-amber-300 rounded-lg text-xs font-bold border border-amber-500/30 active:scale-95 transition-all shadow-sm"
                 >
-                 <span className="text-emerald-500 text-sm leading-none">+</span> Add Task
-               </button>
+                  <IconPlus className="w-3.5 h-3.5" />
+                  <span>添加模块</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => void handleExportImage()}
                   disabled={isExportingImage || nodes.length === 0}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-sky-200 hover:shadow-md text-xs font-bold text-slate-700 transition-all disabled:cursor-not-allowed disabled:border-slate-100 disabled:text-slate-400"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 rounded-lg text-xs font-bold border border-zinc-700 active:scale-95 transition-all disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  <span className="text-sky-500 text-sm leading-none">↓</span>
-                  {isExportingImage ? 'Exporting...' : 'Export PNG'}
+                  <span>导出 PNG</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => void handleToggleFullscreen()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-violet-200 hover:shadow-md text-xs font-bold text-slate-700 transition-all"
-                  title={isCanvasFullscreen ? 'Exit fullscreen' : 'View graph in fullscreen'}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 rounded-lg text-xs font-bold border border-zinc-700 active:scale-95 transition-all"
+                  title={isCanvasFullscreen ? '退出全屏' : '全屏查看拓扑图'}
                 >
-                  <span className="text-violet-500 text-sm leading-none">⛶</span>
-                  {isCanvasFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                  <span>{isCanvasFullscreen ? '退出全屏' : '全屏展示'}</span>
                 </button>
                </div>
 
-             <div className={`absolute top-3 right-3 z-10 rounded-2xl border border-white/70 bg-white/95 p-3 shadow-lg backdrop-blur-sm ${isCompact ? 'w-64' : 'w-72'}`}>
-               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Edge Actions</p>
+             <div className={`absolute top-3 right-3 z-10 rounded-2xl border border-zinc-800 bg-zinc-900/95 p-3.5 shadow-2xl backdrop-blur-md text-zinc-100 ${isCompact ? 'w-64' : 'w-72'}`}>
+               <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">依赖连线动作 (Edge Actions)</p>
                {selectedEdge && selectedEdgeLabel ? (
                  <>
-                  <p className="mt-2 text-sm font-semibold text-slate-800 leading-snug">
+                  <p className="mt-2 text-xs font-semibold text-zinc-200 leading-snug">
                     {selectedEdgeLabel.from}
-                    <span className="mx-2 text-slate-300">→</span>
+                    <span className="mx-2 text-amber-400">→</span>
                     {selectedEdgeLabel.to}
                   </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Click another edge to switch selection, or use the actions below.
+                  <p className="mt-1 text-[11px] text-zinc-400">
+                    点击其他依赖连线可切换，或点击下方按钮执行倒转或移除：
                   </p>
                   <div className="mt-3 flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => void handleReverseEdge(selectedEdge.id)}
                       disabled={isUpdatingEdge}
-                      className="flex-1 rounded-xl border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                      className="flex-1 rounded-xl border border-amber-500/40 bg-zinc-800 px-3 py-1.5 text-xs font-bold text-amber-300 transition-colors hover:bg-zinc-750 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      Reverse
+                      倒转方向
                     </button>
                     <button
                       type="button"
                       onClick={() => void handleDeleteEdge(selectedEdge.id)}
                       disabled={isUpdatingEdge}
-                      className="flex-1 rounded-xl bg-rose-500 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-rose-600 disabled:cursor-not-allowed disabled:bg-slate-200"
+                      className="flex-1 rounded-xl bg-rose-600/80 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-rose-600 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      Delete
+                      删除连线
                     </button>
                   </div>
                 </>
               ) : (
-                <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                <p className="mt-2 text-xs leading-relaxed text-zinc-400">
                   {isCompact
-                    ? 'Select an edge to delete or reverse it.'
-                    : 'Click an edge to select it. You can then delete it directly or reverse the dependency direction.'}
+                    ? '点击任意连线可倒转依赖或删除。'
+                    : '点击任意依赖连线后，可直接反转依赖先后顺序或移除该依赖约束。'}
                 </p>
               )}
             </div>
@@ -1823,52 +1820,52 @@ export default function DependencyViewsPanel({
 
       {isCreateGraphOpen && createPortal(
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn"
         >
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100">
-              <h2 className="text-lg font-bold text-slate-900">Create Dependency Graph</h2>
-              <p className="text-sm text-slate-500 mt-0.5">Visualize task dependencies as a directed graph</p>
+          <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-zinc-750 text-zinc-100">
+            <div className="px-6 py-5 border-b border-zinc-800 bg-zinc-950/60">
+              <h2 className="text-lg font-black text-zinc-100">创建技能拓扑图</h2>
+              <p className="text-xs text-zinc-400 mt-0.5">将知识模块的上下游依赖关系可视化为有向拓扑</p>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label htmlFor="dependency-graph-name" className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  Graph Name <span className="text-rose-500">*</span>
+                <label htmlFor="dependency-graph-name" className="block text-xs font-bold text-zinc-300 mb-1.5">
+                  拓扑图名称 <span className="text-amber-400">*</span>
                 </label>
                 <input
                   id="dependency-graph-name"
                   type="text"
                   value={newGraphName}
                   onChange={(e) => setNewGraphName(e.target.value)}
-                  placeholder="e.g. Sprint 1 Dependencies"
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all"
+                  placeholder="例如：第一阶段 前置依赖攻坚图"
+                  className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 text-xs text-zinc-100 placeholder-zinc-500 transition-all"
                   onKeyDown={(e) => { if (e.key === 'Enter' && newGraphName.trim()) void handleCreateGraph(); }}
                 />
               </div>
               <div>
-                <label htmlFor="dependency-graph-description" className="block text-sm font-semibold text-slate-700 mb-1.5">Description</label>
+                <label htmlFor="dependency-graph-description" className="block text-xs font-bold text-zinc-300 mb-1.5">拓扑说明 (可选)</label>
                 <textarea
                   id="dependency-graph-description"
                   value={newGraphDesc}
                   onChange={(e) => setNewGraphDesc(e.target.value)}
-                  placeholder="Optional description…"
+                  placeholder="输入此拓扑图的重点或阶段性目标…"
                   rows={2}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm resize-none transition-all"
+                  className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 text-xs text-zinc-200 placeholder-zinc-500 resize-none transition-all leading-relaxed"
                 />
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
+            <div className="px-6 py-4 border-t border-zinc-800 flex justify-end gap-3 bg-zinc-950/60">
               <button
                 type="button"
                 onClick={() => setIsCreateGraphOpen(false)}
-                className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
-              >Cancel</button>
+                className="px-4 py-2 text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-xl transition-all active:scale-95"
+              >取消</button>
               <button
                 type="button"
                 onClick={() => void handleCreateGraph()}
                 disabled={!newGraphName.trim()}
-                className="px-5 py-2 text-sm font-bold bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-sm shadow-emerald-500/20"
-              >Create Graph</button>
+                className="px-5 py-2 text-xs font-black bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 rounded-xl hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md shadow-amber-500/20 active:scale-95"
+              >立即创建</button>
             </div>
           </div>
         </div>,
@@ -1877,85 +1874,85 @@ export default function DependencyViewsPanel({
 
       {isAddTaskOpen && createPortal(
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn"
         >
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100">
-              <h2 className="text-lg font-bold text-slate-900">
-                {addTaskSuccessorId ? 'Add Next Task' : 'Add Task to Graph'}
+          <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-zinc-750 text-zinc-100">
+            <div className="px-6 py-5 border-b border-zinc-800 bg-zinc-950/60">
+              <h2 className="text-lg font-black text-zinc-100">
+                {addTaskSuccessorId ? '添加后置承接模块' : '向拓扑图添加知识模块'}
               </h2>
               <div className="flex items-center justify-between mt-2">
-                <p className="text-sm text-slate-500">
+                <p className="text-xs text-zinc-400">
                   {addTaskSuccessorId
-                    ? 'The selected tasks will be connected as successors'
-                    : `${availableTasksForAdd.length} task${availableTasksForAdd.length !== 1 ? 's' : ''} available`}
+                    ? '所选模块将作为前序知识的后置节点'
+                    : `当前可用 ${availableTasksForAdd.length} 个知识模块`}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={handleOpenQuickCreateTask}
-                    className="text-xs px-2.5 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold transition-colors"
+                    className="text-xs px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold hover:bg-amber-500/25 transition-all active:scale-95"
                   >
-                    New Task
+                    新建模块
                   </button>
                   <button
                     type="button"
                     onClick={() => setHideCompletedInAdd(!hideCompletedInAdd)}
-                    className="text-xs px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium transition-colors"
+                    className="text-xs px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-zinc-100 font-medium transition-all active:scale-95"
                   >
-                    {hideCompletedInAdd ? 'Show Done' : 'Hide Done'}
+                    {hideCompletedInAdd ? '显示已掌握' : '隐藏已掌握'}
                   </button>
                 </div>
               </div>
             </div>
             <div className="p-6">
               {availableTasksForAdd.length === 0 ? (
-                <div className="py-8 text-center text-slate-400">
-                  <div className="text-3xl mb-2">✨</div>
-                  <p className="font-medium text-sm text-slate-500">
-                    {tasks.length === 0 ? 'No tasks yet for this project' : 'All available tasks are already in this graph'}
+                <div className="py-8 text-center text-zinc-500">
+                  <IconCheck className="w-8 h-8 text-amber-400 mx-auto mb-2 opacity-60" />
+                  <p className="font-medium text-xs text-zinc-300">
+                    {tasks.length === 0 ? '此技能树尚未创建知识模块' : '所有可用模块均已加入该拓扑图'}
                   </p>
-                  <p className="mt-1 text-xs text-slate-400">
-                    Create a new task here and it will appear selected in the list right away.
+                  <p className="mt-1 text-[11px] text-zinc-500">
+                    点击下方按钮可直接新建知识模块并自动选入。
                   </p>
                   <button
                     type="button"
                     onClick={handleOpenQuickCreateTask}
-                    className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white shadow-sm shadow-emerald-500/25 transition-colors hover:bg-emerald-600"
+                    className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 px-4 py-2 text-xs font-black text-zinc-950 shadow-md shadow-amber-500/20 transition-all hover:brightness-105 active:scale-95"
                   >
-                    <span className="text-base leading-none">+</span>
-                    Create New Task
+                    <IconPlus className="w-3.5 h-3.5" />
+                    <span>新建知识模块</span>
                   </button>
                 </div>
               ) : (
                 <div className="space-y-1.5 max-h-72 overflow-y-auto">
                   {availableTasksForAdd.map((task) => {
                     const color = PRIORITY_COLORS[task.priority] ?? '#94a3b8';
+                    const isSelected = selectedAddTaskIds.includes(task.id);
                     return (
                       <button
                         type="button"
                         key={task.id}
                         onClick={() => {
-                          const isSelected = selectedAddTaskIds.includes(task.id);
                           setSelectedAddTaskIds(isSelected
                             ? selectedAddTaskIds.filter((id) => id !== task.id)
                             : [...selectedAddTaskIds, task.id]);
                         }}
-                        className={`w-full text-left px-4 py-3 rounded-xl text-sm transition-all border-2 ${
-                          selectedAddTaskIds.includes(task.id)
-                            ? 'border-emerald-500 bg-emerald-50'
-                            : 'border-transparent hover:bg-slate-50 hover:border-slate-200'
+                        className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs transition-all border ${
+                          isSelected
+                            ? 'border-amber-400 bg-amber-500/10 text-amber-300'
+                            : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 text-zinc-300'
                         }`}
                       >
                         <div className="flex items-center gap-2.5">
-                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                          <span className="font-semibold text-slate-800 truncate">{task.title}</span>
-                          {selectedAddTaskIds.includes(task.id) && (
-                            <span className="ml-auto text-emerald-500 flex-shrink-0">✓</span>
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                          <span className="font-bold truncate">{task.title}</span>
+                          {isSelected && (
+                            <span className="ml-auto text-amber-400 font-black flex-shrink-0">✓</span>
                           )}
                         </div>
                         {task.description && (
-                          <p className="text-xs text-slate-400 mt-1.5 ml-5 line-clamp-1">{task.description}</p>
+                          <p className="text-[11px] text-zinc-500 mt-1 ml-4.5 line-clamp-1">{task.description}</p>
                         )}
                       </button>
                     );
@@ -1963,25 +1960,25 @@ export default function DependencyViewsPanel({
                 </div>
               )}
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
+            <div className="px-6 py-4 border-t border-zinc-800 flex justify-end gap-3 bg-zinc-950/60">
               <button
                 type="button"
                 onClick={handleOpenQuickCreateTask}
-                className="px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50 rounded-xl transition-colors"
+                className="px-3.5 py-2 text-xs font-bold text-amber-300 hover:text-amber-200 hover:bg-zinc-800 rounded-xl transition-all active:scale-95"
               >
-                New Task
+                新建模块
               </button>
               <button
                 type="button"
-                 onClick={resetAddTaskState}
-                 className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
-               >Cancel</button>
+                onClick={resetAddTaskState}
+                className="px-4 py-2 text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-xl transition-all active:scale-95"
+              >取消</button>
               <button
                 type="button"
                 onClick={() => void handleAddTask()}
                 disabled={selectedAddTaskIds.length === 0 || availableTasksForAdd.length === 0}
-                className="px-5 py-2 text-sm font-bold bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-sm shadow-emerald-500/20"
-              >{selectedAddTaskIds.length > 0 ? `Add ${selectedAddTaskIds.length} Task${selectedAddTaskIds.length > 1 ? 's' : ''} to Graph` : 'Add to Graph'}</button>
+                className="px-5 py-2 text-xs font-black bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 rounded-xl hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md shadow-amber-500/20 active:scale-95"
+              >{selectedAddTaskIds.length > 0 ? `添加 ${selectedAddTaskIds.length} 个模块到拓扑` : '添加到拓扑'}</button>
             </div>
           </div>
         </div>,
@@ -1989,52 +1986,52 @@ export default function DependencyViewsPanel({
       )}
 
       {isQuickCreateTaskOpen && createPortal(
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]">
-          <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="border-b border-slate-100 px-6 py-5">
-              <h2 className="text-lg font-bold text-slate-900">Create Task for This Graph</h2>
-              <p className="mt-1 text-sm text-slate-500">Create a new task without leaving Graph view. It will appear in the picker already selected.</p>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-zinc-900 border border-zinc-750 text-zinc-100 shadow-2xl">
+            <div className="border-b border-zinc-800 px-6 py-5 bg-zinc-950/60">
+              <h2 className="text-lg font-black text-zinc-100">为拓扑图快速创建模块</h2>
+              <p className="mt-1 text-xs text-zinc-400">无需切出拓扑图视图，新建后将直接默认选入当前图谱。</p>
             </div>
             <div className="space-y-4 p-6">
               <div>
-                <label htmlFor="quick-create-task-title" className="mb-1 block text-sm font-semibold text-slate-700">Title *</label>
+                <label htmlFor="quick-create-task-title" className="mb-1 block text-xs font-bold text-zinc-300">模块名称 *</label>
                 <input
                   id="quick-create-task-title"
                   type="text"
                   value={quickCreateTaskForm.title}
                   onChange={(event) => setQuickCreateTaskForm({ ...quickCreateTaskForm, title: event.target.value })}
-                  placeholder="Enter task title"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="输入模块名称"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2.5 text-xs text-zinc-100 placeholder-zinc-500 transition-all focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/50"
                   autoFocus
                 />
               </div>
               <div>
-                <label htmlFor="quick-create-task-description" className="mb-1 block text-sm font-semibold text-slate-700">Description</label>
+                <label htmlFor="quick-create-task-description" className="mb-1 block text-xs font-bold text-zinc-300">讲义或说明</label>
                 <textarea
                   id="quick-create-task-description"
                   value={quickCreateTaskForm.description}
                   onChange={(event) => setQuickCreateTaskForm({ ...quickCreateTaskForm, description: event.target.value })}
                   rows={3}
-                  placeholder="Optional description"
-                  className="w-full resize-none rounded-xl border border-slate-200 px-4 py-2.5 text-sm transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="可选：模块要点或说明…"
+                  className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2.5 text-xs text-zinc-200 placeholder-zinc-500 transition-all focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/50 leading-relaxed"
                 />
               </div>
               <div>
-                <label htmlFor="quick-create-task-priority" className="mb-1 block text-sm font-semibold text-slate-700">Priority</label>
+                <label htmlFor="quick-create-task-priority" className="mb-1 block text-xs font-bold text-zinc-300">重要优先级</label>
                 <select
                   id="quick-create-task-priority"
                   value={quickCreateTaskForm.priority}
                   onChange={(event) => setQuickCreateTaskForm({ ...quickCreateTaskForm, priority: event.target.value as TaskPriority })}
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2.5 text-xs text-zinc-100 transition-all focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/50"
                 >
-                  <option value="critical">Critical</option>
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
+                  <option value="critical">核心必备 (Critical)</option>
+                  <option value="high">深度推荐 (High)</option>
+                  <option value="medium">标准基准 (Medium)</option>
+                  <option value="low">拓展选修 (Low)</option>
                 </select>
               </div>
               <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">Tags</label>
+                <label className="mb-2 block text-xs font-bold text-zinc-300">所属标签</label>
                 <TagSelector
                   tags={tags}
                   selectedTagIds={quickCreateTaskForm.tags}
@@ -2042,24 +2039,24 @@ export default function DependencyViewsPanel({
                 />
               </div>
               {quickCreateTaskError && (
-                <p className="text-sm font-medium text-rose-600">{quickCreateTaskError}</p>
+                <p className="text-xs font-medium text-rose-400">{quickCreateTaskError}</p>
               )}
             </div>
-            <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
+            <div className="flex justify-end gap-3 border-t border-zinc-800 px-6 py-4 bg-zinc-950/60">
               <button
                 type="button"
                 onClick={handleCloseQuickCreateTask}
-                className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100"
+                className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 active:scale-95"
               >
-                Cancel
+                取消
               </button>
               <button
                 type="button"
                 onClick={() => void handleQuickCreateTask()}
                 disabled={isCreatingTask || !quickCreateTaskForm.title.trim()}
-                className="rounded-xl bg-emerald-500 px-5 py-2 text-sm font-bold text-white shadow-sm shadow-emerald-500/20 transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                className="rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 px-5 py-2 text-xs font-black text-zinc-950 shadow-md shadow-amber-500/20 transition-all hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {isCreatingTask ? 'Creating...' : 'Create Task'}
+                {isCreatingTask ? '创建中...' : '立即创建模块'}
               </button>
             </div>
           </div>

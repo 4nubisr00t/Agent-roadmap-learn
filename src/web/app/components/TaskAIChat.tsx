@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { marked } from 'marked';
 import { SYSTEM_PROMPTS, AISettingsState } from './modals/AISettingsModal.js';
+import { IconAI, IconUser, IconSend, IconTrash, IconSettings, IconFileText, IconSparkles, IconLightning } from './Icons.js';
 
 interface Task {
   id: string;
@@ -62,7 +63,15 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
   const [activeSettings, setActiveSettings] = useState<AISettingsState | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Reload messages when task or user changes
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('roadmap_ai_config');
+      if (saved) {
+        setActiveSettings(JSON.parse(saved));
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(cacheKey);
@@ -72,12 +81,19 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
     }
   }, [cacheKey]);
 
-  // Save messages per task and user
   useEffect(() => {
     try {
       localStorage.setItem(cacheKey, JSON.stringify(messages));
     } catch {}
   }, [messages, cacheKey]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, streamBuffer]);
 
   const handleClearHistory = () => {
     if (confirm('确认清空当前节点的对话记录吗？')) {
@@ -90,7 +106,6 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
     const textToSend = (userPromptText || input).trim();
     if (!textToSend || isStreaming) return;
 
-    // Check config
     let cfg: AISettingsState | null = activeSettings;
     if (!cfg) {
       try {
@@ -119,7 +134,6 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
     setIsStreaming(true);
     setStreamBuffer('');
 
-    // Prepare system context
     const taskAnnotations = annotations.filter(a => a.taskId === task.id);
     let systemContent = SYSTEM_PROMPTS[cfg.systemPromptPreset as keyof typeof SYSTEM_PROMPTS] || SYSTEM_PROMPTS.pwn;
     systemContent += `\n\n【当前学习上下文】\n- 路线/技能树：《${project.name}》\n- 当前攻坚节点：【${task.title}】\n- 状态：${task.status}`;
@@ -194,7 +208,6 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
         }
       }
 
-      // Append assistant message
       if (accumulated) {
         const botMsg: ChatMessage = {
           id: `ast_${Date.now()}`,
@@ -208,7 +221,7 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
       const errorMsg: ChatMessage = {
         id: `err_${Date.now()}`,
         role: 'assistant',
-        content: `⚠️ **AI 响应异常**：${err.message || '未知网络错误'}。\n\n请检查你的 [AI 配置] 是否正确或 API 额度是否充足以继续。`,
+        content: `**AI 响应异常**：${err.message || '未知网络错误'}。\n\n请在 [AI 配置] 中检查 API Key 或供应商连接。`,
         createdAt: Date.now(),
       };
       setMessages(prev => [...prev, errorMsg]);
@@ -219,28 +232,30 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
   };
 
   const currentProviderBadge = activeSettings ? (
-    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
-      ⚡ {activeSettings.providerId} · {activeSettings.model}
+    <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
+      {activeSettings.providerId} · {activeSettings.model}
     </span>
   ) : (
-    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-      ⚠️ 未配置 API Key
+    <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30">
+      未配置 API Key
     </span>
   );
 
   return (
-    <div className="flex flex-col h-[580px] bg-slate-50/50 rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm">
+    <div className="flex flex-col h-[580px] bg-zinc-950/70 rounded-2xl border border-zinc-800 overflow-hidden shadow-2xl">
       {/* Top Bar */}
-      <div className="px-4 py-3 bg-white border-b border-slate-200/80 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">🤖</span>
+      <div className="px-4 py-3 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center font-bold">
+            <IconAI className="w-4 h-4" />
+          </div>
           <div>
-            <div className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-              <span>AI 导师伴学实时问答</span>
+            <div className="text-xs font-black text-zinc-100 flex items-center gap-2">
+              <span>AI 导师伴学实时对话</span>
               {currentProviderBadge}
             </div>
-            <div className="text-[10px] text-slate-400">
-              已挂载上下文：【{task.title}】
+            <div className="text-[10px] text-zinc-400 font-mono">
+              挂载知识域：【{task.title}】
             </div>
           </div>
         </div>
@@ -251,35 +266,35 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
               type="button"
               onClick={handleClearHistory}
               title="清空当前记录"
-              className="text-[11px] text-slate-400 hover:text-rose-600 transition-colors p-1"
+              className="text-[11px] text-zinc-400 hover:text-rose-400 transition-colors px-2 py-1 rounded active:scale-95"
             >
-              清空
+              清空记录
             </button>
           )}
           <button
             type="button"
             onClick={onOpenAISettings}
-            className="px-2.5 py-1 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all flex items-center gap-1"
+            className="px-2.5 py-1 text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-lg transition-all flex items-center gap-1 active:scale-95"
           >
-            <span>⚙️</span>
-            <span>切换/配置供应商</span>
+            <IconSettings className="w-3.5 h-3.5 text-amber-400" />
+            <span>配置供应商</span>
           </button>
         </div>
       </div>
 
       {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 bg-gradient-to-b from-white to-slate-50">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 bg-gradient-to-b from-zinc-950/60 to-zinc-900/60">
         {messages.length === 0 && !isStreaming && (
           <div className="py-8 text-center space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 text-2xl flex items-center justify-center mx-auto text-indigo-600 shadow-sm">
-              💡
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-400 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10">
+              <IconSparkles className="w-6 h-6" />
             </div>
             <div className="max-w-md mx-auto">
-              <h4 className="text-sm font-black text-slate-800">
-                向 AI 导师随时发起提问与考核
+              <h4 className="text-sm font-black text-zinc-100 tracking-tight">
+                与 AI 导师随时发起深度研讨与考核
               </h4>
-              <p className="text-xs text-slate-500 mt-1">
-                导师已通读本节点的课件原理、代码与你的批注。点击下方预设问题或直接在底部输入即可交流：
+              <p className="text-xs text-zinc-400 mt-1">
+                导师已预先研读本节点的讲义原理、代码段及你的批注。点击下方预设提问或在底部自由输入：
               </p>
             </div>
 
@@ -287,34 +302,38 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-lg mx-auto text-left pt-2">
               <button
                 type="button"
-                onClick={() => handleSend('请用通俗生动的比喻，给我讲透本节点的核心机制和本质原理！')}
-                className="p-3 bg-white hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 rounded-xl transition-all text-xs font-bold text-slate-700 shadow-sm"
+                onClick={() => handleSend('请用通俗生动的比喻，给我讲透本节点的核心机制和底层原理！')}
+                className="p-3 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/50 rounded-xl transition-all text-xs font-bold text-zinc-200 shadow-sm active:scale-95 flex items-center gap-2 group"
               >
-                <span>📖 讲透本节核心机制与原理</span>
+                <IconBook className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                <span>讲透本节核心机制与底层原理</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleSend('这部分代码或保护机制最关键的突破口是什么？为什么会产生这种防御特性？')}
-                className="p-3 bg-white hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 rounded-xl transition-all text-xs font-bold text-slate-700 shadow-sm"
+                className="p-3 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/50 rounded-xl transition-all text-xs font-bold text-zinc-200 shadow-sm active:scale-95 flex items-center gap-2 group"
               >
-                <span>🔍 剖析底层攻防与成因</span>
+                <IconLightning className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                <span>剖析攻防对抗成因与突破口</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => handleSend('请出一道结合实际场景的填空或选择测试题考考我，我答对后再通过！')}
-                className="p-3 bg-white hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 rounded-xl transition-all text-xs font-bold text-slate-700 shadow-sm"
+                onClick={() => handleSend('请出一道结合实战场景的填空或选择测试题考考我，我答对后再通过！')}
+                className="p-3 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/50 rounded-xl transition-all text-xs font-bold text-zinc-200 shadow-sm active:scale-95 flex items-center gap-2 group"
               >
-                <span>🎯 出一道场景题考考我</span>
+                <IconSparkles className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                <span>出一道实战场景考核题考考我</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => handleSend('请根据课件内容，总结这节课在实际 CTF 或生产攻防中最容易踩的坑。')}
-                className="p-3 bg-white hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 rounded-xl transition-all text-xs font-bold text-slate-700 shadow-sm"
+                onClick={() => handleSend('请根据课件内容，总结这节课在实际生产或竞赛中最容易踩的实战大坑。')}
+                className="p-3 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/50 rounded-xl transition-all text-xs font-bold text-zinc-200 shadow-sm active:scale-95 flex items-center gap-2 group"
               >
-                <span>⚠️ 总结最容易踩的实战大坑</span>
+                <IconFileText className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                <span>总结最容易踩的实战误区</span>
               </button>
             </div>
           </div>
@@ -329,51 +348,51 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
               className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
             >
               {!isUser && (
-                <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm">
-                  🤖
+                <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm">
+                  <IconAI className="w-4 h-4" />
                 </div>
               )}
               <div
                 className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs leading-relaxed ${
                   isUser
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/10 font-medium'
-                    : 'bg-white border border-slate-200/80 text-slate-800 shadow-sm'
+                    ? 'bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-zinc-950 shadow-lg shadow-amber-500/10 font-bold'
+                    : 'bg-zinc-900 border border-zinc-800 text-zinc-200 shadow-sm'
                 }`}
               >
                 {isUser ? (
                   <div className="whitespace-pre-wrap">{m.content}</div>
                 ) : (
                   <div
-                    className="prose prose-xs max-w-none text-slate-800"
+                    className="courseware-content max-w-none text-zinc-200"
                     dangerouslySetInnerHTML={{ __html: marked.parse(m.content) as string }}
                   />
                 )}
               </div>
               {isUser && (
-                <div className="w-7 h-7 rounded-lg bg-slate-800 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm">
-                  👤
+                <div className="w-8 h-8 rounded-xl bg-zinc-800 border border-zinc-700 text-amber-400 flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm">
+                  <IconUser className="w-4 h-4" />
                 </div>
               )}
             </div>
           );
         })}
 
-        {/* Streaming Buffer Bubble */}
+        {/* Streaming Buffer */}
         {isStreaming && (
           <div className="flex gap-3 justify-start animate-fadeIn">
-            <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm animate-pulse">
-              🤖
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm animate-pulse">
+              <IconAI className="w-4 h-4" />
             </div>
-            <div className="max-w-[85%] rounded-2xl px-4 py-3 text-xs leading-relaxed bg-white border border-indigo-200 text-slate-800 shadow-sm">
+            <div className="max-w-[85%] rounded-2xl px-4 py-3 text-xs leading-relaxed bg-zinc-900 border border-amber-500/40 text-zinc-200 shadow-sm">
               {streamBuffer ? (
                 <div
-                  className="prose prose-xs max-w-none text-slate-800"
+                  className="courseware-content max-w-none text-zinc-200"
                   dangerouslySetInnerHTML={{ __html: marked.parse(streamBuffer) as string }}
                 />
               ) : (
-                <div className="flex items-center gap-2 text-slate-400">
-                  <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
-                  <span>正在思考与整理知识点...</span>
+                <div className="flex items-center gap-2 text-zinc-400">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                  <span>正在深度思考并组织核心解答...</span>
                 </div>
               )}
             </div>
@@ -384,7 +403,7 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
       </div>
 
       {/* Input Box */}
-      <div className="p-3 bg-white border-t border-slate-200/80">
+      <div className="p-3.5 bg-zinc-900 border-t border-zinc-800">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -396,19 +415,22 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="输入你的疑问或指令（按 Enter 发送）..."
+            placeholder="向导师提出你的疑问或输入答案（回车发送）..."
             disabled={isStreaming}
-            className="flex-1 px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all font-medium disabled:opacity-50"
+            className="flex-1 px-4 py-2.5 text-xs bg-zinc-950 border border-zinc-700/80 rounded-xl focus:outline-none focus:border-amber-500 text-zinc-100 placeholder-zinc-500 transition-all font-medium disabled:opacity-50"
           />
           <button
             type="submit"
             disabled={isStreaming || !input.trim()}
-            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-indigo-600/20 active:scale-95 flex items-center gap-1.5 flex-shrink-0"
+            className="px-4 py-2.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 disabled:opacity-40 text-zinc-950 text-xs font-black rounded-xl transition-all shadow-md shadow-amber-500/20 active:scale-95 flex items-center gap-1.5 flex-shrink-0"
           >
             {isStreaming ? (
-              <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
             ) : (
-              <span>发送 🚀</span>
+              <>
+                <IconSend className="w-3.5 h-3.5" />
+                <span>发送</span>
+              </>
             )}
           </button>
         </form>

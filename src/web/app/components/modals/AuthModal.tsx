@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { IconLock, IconUser, IconClose, IconCheck } from '../Icons.js';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -65,53 +66,53 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn"
+      className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
         }
       }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-100 animate-slideUp">
+      <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-zinc-800 gold-border-hover animate-slideUp">
         {/* Header */}
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold text-base border border-emerald-500/20">
-              🔐
+        <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/10">
+              <IconLock className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-black text-slate-800">
-                {mode === 'login' ? '用户登录' : '创建新账号'}
+              <h2 className="text-base font-black text-zinc-100 tracking-tight">
+                {mode === 'login' ? '账号鉴权登录' : '注册专属空间'}
               </h2>
-              <p className="text-[11px] text-slate-500 font-medium">
-                {mode === 'login' ? '登录后同步个人技能树与笔记' : '注册即可拥有独立隔离的学习空间'}
+              <p className="text-[11px] text-zinc-400 font-medium mt-0.5">
+                {mode === 'login' ? '登录以加载个人专属技能树与加密资料库' : '注册即刻享有物理级隔离的成长空间'}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center font-bold transition-colors"
+            className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-100 flex items-center justify-center transition-colors active:scale-95"
           >
-            ✕
+            <IconClose className="w-4 h-4" />
           </button>
         </div>
 
         {/* Mode Tabs */}
-        <div className="flex border-b border-slate-100 bg-slate-100/60 p-1 mx-6 mt-6 rounded-xl">
+        <div className="flex border border-zinc-800 bg-zinc-950 p-1 mx-6 mt-6 rounded-xl">
           <button
             type="button"
             onClick={() => {
               setMode('login');
               setError('');
             }}
-            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all active:scale-95 ${
               mode === 'login'
-                ? 'bg-white text-emerald-700 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
+                ? 'bg-gradient-to-r from-amber-500 to-amber-400 text-zinc-950 font-black shadow-md shadow-amber-500/20'
+                : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            登录账号
+            账号登录
           </button>
           <button
             type="button"
@@ -119,57 +120,66 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               setMode('register');
               setError('');
             }}
-            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all active:scale-95 ${
               mode === 'register'
-                ? 'bg-white text-emerald-700 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
+                ? 'bg-gradient-to-r from-amber-500 to-amber-400 text-zinc-950 font-black shadow-md shadow-amber-500/20'
+                : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            注册新用户
+            新用户注册
           </button>
         </div>
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
-              <span>⚠️</span>
+            <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs font-semibold flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping flex-shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">用户名</label>
+            <label className="block text-xs font-bold text-zinc-300 mb-1.5 flex items-center gap-1.5">
+              <IconUser className="w-3.5 h-3.5 text-amber-400" />
+              <span>用户名</span>
+            </label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="请输入用户名（如 mom, 4nubisr00t）"
               autoFocus
-              className="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-medium"
+              className="w-full px-3.5 py-2.5 text-xs bg-zinc-950 border border-zinc-700/80 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-zinc-100 placeholder-zinc-500 font-medium"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">密码</label>
+            <label className="block text-xs font-bold text-zinc-300 mb-1.5 flex items-center gap-1.5">
+              <IconLock className="w-3.5 h-3.5 text-amber-400" />
+              <span>安全密码</span>
+            </label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="至少 6 位密码"
-              className="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-medium"
+              placeholder="至少 6 位安全密码"
+              className="w-full px-3.5 py-2.5 text-xs bg-zinc-950 border border-zinc-700/80 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-zinc-100 placeholder-zinc-500 font-medium"
             />
           </div>
 
           {mode === 'register' && (
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">确认密码</label>
+              <label className="block text-xs font-bold text-zinc-300 mb-1.5 flex items-center gap-1.5">
+                <IconCheck className="w-3.5 h-3.5 text-amber-400" />
+                <span>确认安全密码</span>
+              </label>
               <input
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="再次输入以确认密码"
-                className="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-medium"
+                className="w-full px-3.5 py-2.5 text-xs bg-zinc-950 border border-zinc-700/80 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-zinc-100 placeholder-zinc-500 font-medium"
               />
             </div>
           )}
@@ -178,23 +188,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <button
               type="submit"
               disabled={loading || !username.trim() || !password}
-              className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-xs rounded-xl hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md shadow-emerald-500/20 active:scale-[0.98] flex items-center justify-center gap-2"
+              className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-zinc-950 font-black text-xs rounded-xl hover:from-amber-400 hover:to-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-amber-500/20 active:scale-[0.98] flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
-                  <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>处理中...</span>
+                  <span className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
+                  <span>正在安全校验...</span>
                 </>
               ) : (
-                <span>{mode === 'login' ? '立即登录' : '创建并直接登录'}</span>
+                <span>{mode === 'login' ? '立即登录' : '立即注册并登入'}</span>
               )}
             </button>
           </div>
         </form>
 
         {/* Footer tip */}
-        <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-400 text-center">
-          未登录状态下仍可浏览公共基础路线与课程
+        <div className="px-6 py-3.5 bg-zinc-950/80 border-t border-zinc-800 text-[11px] text-zinc-500 text-center flex items-center justify-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500/50" />
+          <span>游客模式下仍可完整研读公共基准课程与实验讲义</span>
         </div>
       </div>
     </div>

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { IconSettings, IconClose, IconAI, IconLightning, IconCheck, IconLayers, IconSparkles } from '../Icons.js';
 
 export interface AIProviderPreset {
   id: string;
   name: string;
-  icon: string;
   baseUrl: string;
   defaultModel: string;
   models: string[];
@@ -61,7 +61,6 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; latencyMs?: number; message?: string } | null>(null);
 
-  // Fetch presets from backend on open
   useEffect(() => {
     if (isOpen) {
       fetch('/api/ai/providers')
@@ -82,7 +81,6 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
   const handleProviderChange = (newProviderId: string) => {
     const preset = presets.find(p => p.id === newProviderId);
     if (preset) {
-      // Look up saved key for this provider if any
       const savedKeys = JSON.parse(localStorage.getItem('roadmap_ai_keys_cache') || '{}');
       setSettings(prev => ({
         ...prev,
@@ -119,7 +117,7 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
         setTestResult({
           success: true,
           latencyMs: data.latencyMs,
-          message: `连接成功！响应延迟 ${data.latencyMs}ms (模型回复: "${data.reply}")`,
+          message: `连接成功 (握手延迟 ${data.latencyMs}ms，模型回复: "${data.reply}")`,
         });
       } else {
         setTestResult({
@@ -141,7 +139,6 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
   const handleSave = () => {
     localStorage.setItem('roadmap_ai_config', JSON.stringify(settings));
 
-    // Cache key for this provider
     try {
       const savedKeys = JSON.parse(localStorage.getItem('roadmap_ai_keys_cache') || '{}');
       if (settings.apiKey) {
@@ -158,35 +155,35 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn"
+      className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
         }
       }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-100 animate-slideUp flex flex-col max-h-[90vh]">
+      <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden border border-zinc-800 gold-border-hover animate-slideUp flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 flex items-center justify-center font-bold text-base border border-indigo-500/20">
-              🤖
+        <div className="p-5 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/10">
+              <IconSettings className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-black text-slate-800">
+              <h2 className="text-base font-black text-zinc-100 tracking-tight">
                 AI 导师模型与供应商配置
               </h2>
-              <p className="text-[11px] text-slate-500 font-medium">
-                配置大模型 API 后即可在任何卡片与课程中进行实时智能问答
+              <p className="text-[11px] text-zinc-400 font-medium mt-0.5">
+                接入工业级大模型 API，驱动卡片实时伴学与教材一键生成技能树
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center font-bold transition-colors"
+            className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-100 flex items-center justify-center transition-colors active:scale-95"
           >
-            ✕
+            <IconClose className="w-4 h-4" />
           </button>
         </div>
 
@@ -194,19 +191,22 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
         <div className="p-6 space-y-4 overflow-y-auto flex-1">
           {/* Provider Selection */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-              <span>选择大模型供应商 / 平台 *</span>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-zinc-300">
+                大模型供应商平台
+              </label>
               {currentPreset?.websiteUrl && (
                 <a
                   href={currentPreset.websiteUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-[11px] text-indigo-600 hover:text-indigo-800 underline flex items-center gap-0.5"
+                  className="text-[11px] text-amber-400 hover:text-amber-300 font-medium underline flex items-center gap-1"
                 >
-                  前往官网获取 API Key ↗
+                  <span>获取官方 Key</span>
+                  <span>↗</span>
                 </a>
               )}
-            </label>
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {presets.map((p) => {
                 const isSelected = settings.providerId === p.id;
@@ -215,16 +215,20 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
                     key={p.id}
                     type="button"
                     onClick={() => handleProviderChange(p.id)}
-                    className={`p-2.5 rounded-xl border text-left transition-all flex items-center gap-2 ${
+                    className={`p-2.5 rounded-xl border text-left transition-all active:scale-95 flex items-center gap-2.5 ${
                       isSelected
-                        ? 'border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-500/20 font-bold text-indigo-950'
-                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700'
+                        ? 'border-amber-500/80 bg-amber-500/10 text-amber-300 shadow-sm shadow-amber-500/10 ring-1 ring-amber-500/40 font-bold'
+                        : 'border-zinc-800/90 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/60 text-zinc-300'
                     }`}
                   >
-                    <span className="text-lg">{p.icon}</span>
+                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-black ${
+                      isSelected ? 'bg-amber-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'
+                    }`}>
+                      {p.id.slice(0, 2).toUpperCase()}
+                    </div>
                     <div className="truncate">
                       <div className="text-xs truncate">{p.name.split(' ')[0]}</div>
-                      <div className="text-[10px] text-slate-400 truncate">{p.id}</div>
+                      <div className="text-[10px] text-zinc-500 truncate">{p.id}</div>
                     </div>
                   </button>
                 );
@@ -232,80 +236,81 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
             </div>
           </div>
 
-          {/* Provider Description Banner */}
+          {/* Provider Description */}
           {currentPreset && (
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 text-xs text-slate-600 flex items-center gap-2">
-              <span>💡</span>
+            <div className="p-3 bg-zinc-950/80 rounded-xl border border-zinc-800/80 text-xs text-zinc-400 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
               <span>{currentPreset.description}</span>
             </div>
           )}
 
           {/* Base URL */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              API Base URL *
+            <label className="block text-xs font-bold text-zinc-300 mb-1.5">
+              API Base URL
             </label>
             <input
               type="text"
               value={settings.baseUrl}
               onChange={(e) => setSettings({ ...settings, baseUrl: e.target.value })}
               placeholder="例如 https://api.deepseek.com/v1"
-              className="w-full px-3.5 py-2 text-xs font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full px-3.5 py-2 text-xs font-mono bg-zinc-950 border border-zinc-700/80 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-zinc-100 placeholder-zinc-500"
             />
-            <p className="text-[10px] text-slate-400 mt-1">
-              遵循 OpenAI 标准接口规范，会自动请求 <code className="text-slate-600">/chat/completions</code>
+            <p className="text-[10px] text-zinc-500 mt-1">
+              遵循 OpenAI 标准协议，系统会自动向 <code className="text-amber-400/90">/chat/completions</code> 发起请求
             </p>
           </div>
 
           {/* API Key */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
-              <span>API Key {currentPreset?.needApiKey ? '*' : '(本地模型可选)'}</span>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-zinc-300">
+                API 授权凭证 (API Key)
+              </label>
               <button
                 type="button"
                 onClick={() => setShowApiKey(!showApiKey)}
-                className="text-[11px] text-slate-500 hover:text-slate-800"
+                className="text-[11px] text-zinc-400 hover:text-amber-400 transition-colors"
               >
-                {showApiKey ? '隐藏 Key 🔒' : '显示 Key 👁️'}
+                {showApiKey ? '隐藏秘钥' : '显示秘钥'}
               </button>
-            </label>
+            </div>
             <input
               type={showApiKey ? 'text' : 'password'}
               value={settings.apiKey}
               onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
               placeholder={currentPreset?.needApiKey ? 'sk-...' : '本地模型无需 API Key，留空即可'}
-              className="w-full px-3.5 py-2 text-xs font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full px-3.5 py-2 text-xs font-mono bg-zinc-950 border border-zinc-700/80 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-zinc-100 placeholder-zinc-500"
             />
-            <p className="text-[10px] text-slate-400 mt-1">
-              🔒 秘钥仅保存在您本地浏览器中，通过本地后端直连中转，绝不上传第三方数据库
+            <p className="text-[10px] text-zinc-500 mt-1">
+              秘钥仅加密保留于您本地浏览器中，绝不上传任何外部第三方服务器
             </p>
           </div>
 
           {/* Model Selection */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                模型名称 (Model) *
+              <label className="block text-xs font-bold text-zinc-300 mb-1.5">
+                模型标识 (Model)
               </label>
               <input
                 type="text"
                 value={settings.model}
                 onChange={(e) => setSettings({ ...settings, model: e.target.value })}
                 placeholder="例如 deepseek-chat, gpt-4o"
-                className="w-full px-3.5 py-2 text-xs font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-3.5 py-2 text-xs font-mono bg-zinc-950 border border-zinc-700/80 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-zinc-100 placeholder-zinc-500"
               />
             </div>
 
-            {/* Quick Model Selector */}
             {currentPreset && currentPreset.models.length > 0 && (
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-zinc-300 mb-1.5">
                   推荐预设模型
                 </label>
                 <select
                   value={currentPreset.models.includes(settings.model) ? settings.model : ''}
                   onChange={(e) => e.target.value && setSettings({ ...settings, model: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-medium"
+                  className="w-full px-3 py-2 text-xs bg-zinc-950 border border-zinc-700/80 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-zinc-200 font-medium"
                 >
                   <option value="">快速选用内置模型...</option>
                   {currentPreset.models.map((m) => (
@@ -320,42 +325,42 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
 
           {/* System Prompt Preset */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              导师人设与角色定位 (System Prompt)
+            <label className="block text-xs font-bold text-zinc-300 mb-1.5">
+              导师教学人设 (System Persona)
             </label>
-            <div className="grid grid-cols-3 gap-2 mb-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setSettings({ ...settings, systemPromptPreset: 'pwn' })}
-                className={`p-2 rounded-xl border text-left text-xs font-bold transition-all ${
+                className={`p-2.5 rounded-xl border text-left text-xs font-bold transition-all active:scale-95 ${
                   settings.systemPromptPreset === 'pwn'
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    ? 'border-amber-500/80 bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/40'
+                    : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:bg-zinc-800'
                 }`}
               >
-                🛡️ 二进制与安全导师
+                二进制与底层安全
               </button>
               <button
                 type="button"
                 onClick={() => setSettings({ ...settings, systemPromptPreset: 'fullstack' })}
-                className={`p-2 rounded-xl border text-left text-xs font-bold transition-all ${
+                className={`p-2.5 rounded-xl border text-left text-xs font-bold transition-all active:scale-95 ${
                   settings.systemPromptPreset === 'fullstack'
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    ? 'border-amber-500/80 bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/40'
+                    : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:bg-zinc-800'
                 }`}
               >
-                💻 全栈与架构导师
+                全栈工程与架构师
               </button>
               <button
                 type="button"
                 onClick={() => setSettings({ ...settings, systemPromptPreset: 'socratic' })}
-                className={`p-2 rounded-xl border text-left text-xs font-bold transition-all ${
+                className={`p-2.5 rounded-xl border text-left text-xs font-bold transition-all active:scale-95 ${
                   settings.systemPromptPreset === 'socratic'
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    ? 'border-amber-500/80 bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/40'
+                    : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:bg-zinc-800'
                 }`}
               >
-                💡 苏格拉底启发式
+                苏格拉底式启发
               </button>
             </div>
           </div>
@@ -363,34 +368,36 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
           {/* Test Result Message */}
           {testResult && (
             <div
-              className={`p-3 rounded-xl border text-xs font-medium flex items-start gap-2 ${
+              className={`p-3.5 rounded-xl border text-xs font-medium flex items-start gap-2.5 ${
                 testResult.success
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                  : 'bg-rose-50 border-rose-200 text-rose-800'
+                  ? 'bg-amber-950/40 border-amber-600/60 text-amber-300'
+                  : 'bg-rose-950/40 border-rose-800/80 text-rose-300'
               }`}
             >
-              <span>{testResult.success ? '✅' : '❌'}</span>
+              <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                testResult.success ? 'bg-amber-400' : 'bg-rose-500 animate-ping'
+              }`} />
               <div className="flex-1 leading-relaxed">{testResult.message}</div>
             </div>
           )}
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div className="p-4 border-t border-zinc-800 flex items-center justify-between bg-zinc-950/60">
           <button
             type="button"
             onClick={handleTestConnection}
             disabled={testing || !settings.baseUrl}
-            className="px-4 py-2 text-xs font-bold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5 disabled:opacity-50"
+            className="px-4 py-2 text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5 disabled:opacity-40"
           >
             {testing ? (
               <>
-                <span className="w-3.5 h-3.5 border-2 border-slate-400 border-t-slate-700 rounded-full animate-spin" />
-                <span>正在测速...</span>
+                <span className="w-3.5 h-3.5 border-2 border-zinc-400 border-t-amber-400 rounded-full animate-spin" />
+                <span>连通性测速中...</span>
               </>
             ) : (
               <>
-                <span>⚡</span>
+                <IconLightning className="w-3.5 h-3.5 text-amber-400" />
                 <span>测试连通性</span>
               </>
             )}
@@ -400,14 +407,14 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+              className="px-4 py-2 text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-xl transition-colors active:scale-95"
             >
               取消
             </button>
             <button
               type="button"
               onClick={handleSave}
-              className="px-5 py-2 text-xs font-bold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl shadow-md shadow-indigo-500/20 active:scale-95 transition-all"
+              className="px-5 py-2 text-xs font-black bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-zinc-950 rounded-xl shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
             >
               保存配置
             </button>
