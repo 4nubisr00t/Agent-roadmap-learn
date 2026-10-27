@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import fs, { existsSync } from 'node:fs';
 import type { Server } from 'http';
 import { storage } from '../storage/index.js';
-import { DependencyViewService, TaskService, TagService, authService } from '../services/index.js';
+import { DependencyViewService, TaskService, TagService, authService, aiService } from '../services/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -164,6 +164,64 @@ export function createServer(port: number = 7860): Promise<Server> {
 
     app.get('/api/meta', (_req, res) => {
       res.json(appMetadata);
+    });
+
+    // ==========================================
+    // AI Provider & Chat Routes
+    // ==========================================
+    app.get('/api/ai/providers', (_req, res) => {
+      res.json({
+        success: true,
+        data: aiService.getPresetProviders(),
+      });
+    });
+
+    app.post('/api/ai/test', async (req, res) => {
+      try {
+        const result = await aiService.testConnection(req.body);
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ success: false, error: (error as Error).message });
+      }
+    });
+
+    app.post('/api/ai/chat', async (req, res) => {
+      try {
+        const upstreamRes = await aiService.streamChat(req.body);
+        if (!upstreamRes.ok) {
+          const errText = await upstreamRes.text();
+          let msg = `Upstream error ${upstreamRes.status}: ${upstreamRes.statusText}`;
+          try {
+            const parsed = JSON.parse(errText);
+            if (parsed.error?.message) msg = parsed.error.message;
+          } catch {}
+          res.status(upstreamRes.status).json({ error: msg });
+          return;
+        }
+
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        if (!upstreamRes.body) {
+          res.end();
+          return;
+        }
+
+        const reader = upstreamRes.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+        res.end();
+      } catch (error) {
+        if (!res.headersSent) {
+          res.status(500).json({ error: (error as Error).message });
+        } else {
+          res.end();
+        }
+      }
     });
 
     app.get('/api/projects', async (req, res) => {

@@ -7,6 +7,8 @@ import TagSelector from './components/TagSelector.js';
 import DependencyViewsPanel from './components/DependencyViewsPanel.js';
 import TagManagerModal from './components/modals/TagManagerModal.js';
 import { AuthModal } from './components/modals/AuthModal.js';
+import { AISettingsModal } from './components/modals/AISettingsModal.js';
+import { TaskAIChat } from './components/TaskAIChat.js';
 
 interface Project {
   id: string;
@@ -112,6 +114,7 @@ export interface AnnotationItem {
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<{ id: string; username: string } | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isAISettingsOpen, setIsAISettingsOpen] = useState(false);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [tasks, setTasks] = useState<{ task: Task; project: Project }[]>([]);
@@ -1288,6 +1291,16 @@ const App: React.FC = () => {
               <span>登录 / 注册</span>
             </button>
           )}
+          <div className="h-5 w-px bg-slate-300" />
+          <button
+            type="button"
+            onClick={() => setIsAISettingsOpen(true)}
+            title="配置大模型供应商与 API Key"
+            className="px-3 py-1.5 text-xs font-bold bg-white/90 hover:bg-white text-indigo-700 border border-indigo-200/80 hover:border-indigo-300 rounded-xl shadow-sm hover:shadow transition-all flex items-center gap-1.5 active:scale-95"
+          >
+            <span>🤖</span>
+            <span>AI 配置</span>
+          </button>
         </div>
       </header>
 
@@ -1656,7 +1669,7 @@ const App: React.FC = () => {
                 }`}
               >
                 <span>🤖</span>
-                <span>向 Gemini 发起求教与考核</span>
+                <span>AI 导师伴学 (实时问答)</span>
               </button>
               <button
                 type="button"
@@ -1835,59 +1848,48 @@ const App: React.FC = () => {
 
               {modalActiveTab === 'gemini' && (
                 <div className="space-y-4">
-                  <div className="p-5 bg-gradient-to-br from-indigo-50 via-purple-50 to-emerald-50 rounded-2xl border border-indigo-100 shadow-sm space-y-4">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">🤖</span>
-                      <div>
-                        <h4 className="text-sm font-black text-indigo-950">Antigravity Gemini 导师联动</h4>
-                        <p className="text-xs text-indigo-700 font-medium">点击一键复制 Prompt，切回当前聊天窗即可直接提问</p>
-                      </div>
-                    </div>
+                  <TaskAIChat
+                    task={editingTask}
+                    project={projects.find(p => p.project.id === selectedProject)?.project || { id: selectedProject || '', name: '技能树路线' }}
+                    annotations={annotations}
+                    onOpenAISettings={() => setIsAISettingsOpen(true)}
+                  />
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Fallback prompt copy card for Antigravity Agent interaction */}
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/60">
+                    <div className="text-[11px] font-bold text-slate-500 mb-2 flex items-center justify-between">
+                      <span>📋 或复制 Prompt 到本地 Antigravity 聊天窗口提问：</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={() => {
                           navigator.clipboard.writeText(`Gemini老师，我想学【${editingTask.title}】，请用通俗易懂的生活例子给我讲透它的核心原理和代码逻辑！`);
                           alert('已复制！切回 Antigravity 聊天窗口粘贴发送即可。');
                         }}
-                        className="p-3.5 bg-white/95 hover:bg-indigo-50 rounded-xl border border-indigo-200/80 text-left transition-all shadow-sm hover:shadow active:scale-95"
+                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 shadow-sm transition-all"
                       >
-                        <div className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
-                          <span>📖</span>
-                          <span>讲透核心原理</span>
-                        </div>
-                        <div className="text-[10px] text-slate-500 mt-1">生活化比喻 + 逻辑拆解</div>
+                        📖 讲透核心原理 Prompt
                       </button>
-
                       <button
                         type="button"
                         onClick={() => {
                           navigator.clipboard.writeText(`Gemini老师，我已经学习了【${editingTask.title}】，请出一道带代码或场景的填空测试题考考我，我答对后再帮我点亮！`);
                           alert('已复制！切回 Antigravity 聊天窗口粘贴发送即可。');
                         }}
-                        className="p-3.5 bg-white/95 hover:bg-purple-50 rounded-xl border border-purple-200/80 text-left transition-all shadow-sm hover:shadow active:scale-95"
+                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 shadow-sm transition-all"
                       >
-                        <div className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
-                          <span>🎯</span>
-                          <span>出一道考核题</span>
-                        </div>
-                        <div className="text-[10px] text-slate-500 mt-1">实战填空 / 场景测试</div>
+                        🎯 实战考核题 Prompt
                       </button>
-
                       <button
                         type="button"
                         onClick={() => {
                           navigator.clipboard.writeText(`Gemini老师，我已经通过了【${editingTask.title}】的实战练习，请帮我验收并点亮该模块！`);
                           alert('已复制！切回 Antigravity 聊天窗口粘贴发送即可。');
                         }}
-                        className="p-3.5 bg-white/95 hover:bg-emerald-50 rounded-xl border border-emerald-200/80 text-left transition-all shadow-sm hover:shadow active:scale-95"
+                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 shadow-sm transition-all"
                       >
-                        <div className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
-                          <span>✨</span>
-                          <span>申请点亮模块</span>
-                        </div>
-                        <div className="text-[10px] text-slate-500 mt-1">验收并点亮技能节点</div>
+                        ✨ 申请点亮模块 Prompt
                       </button>
                     </div>
                   </div>
@@ -2215,6 +2217,11 @@ const App: React.FC = () => {
         onLoginSuccess={(user) => {
           setCurrentUser(user);
         }}
+      />
+
+      <AISettingsModal
+        isOpen={isAISettingsOpen}
+        onClose={() => setIsAISettingsOpen(false)}
       />
     </div>
   );
