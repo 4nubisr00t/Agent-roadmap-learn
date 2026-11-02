@@ -136,7 +136,10 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
     setStreamBuffer('');
 
     const taskAnnotations = annotations.filter(a => a.taskId === task.id);
-    let systemContent = SYSTEM_PROMPTS[cfg.systemPromptPreset as keyof typeof SYSTEM_PROMPTS] || SYSTEM_PROMPTS.pwn;
+    let systemContent = SYSTEM_PROMPTS.mentor || SYSTEM_PROMPTS.pwn;
+    if (cfg.customSystemPrompt) {
+      systemContent += `\n\n【学员个性化学习偏好】\n${cfg.customSystemPrompt}`;
+    }
     systemContent += `\n\n【当前学习上下文】\n- 路线/技能树：《${project.name}》\n- 当前攻坚节点：【${task.title}】\n- 状态：${task.status}`;
     if (task.description) {
       systemContent += `\n- 节点大纲与核心逻辑：\n${task.description.slice(0, 1500)}`;

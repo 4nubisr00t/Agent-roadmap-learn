@@ -230,9 +230,58 @@ ${chapterListBrief}
     });
 
     // ========================================================
-    // Step 2: Chapter-by-Chapter Micro Knowledge Mining (逐章精读挖掘)
+    // Step 2: Full-Book Knowledge DAG Extraction (极速轻量知识拓扑与大纲生成，按需解锁精讲)
     // ========================================================
-    const allTasks: Array<{
+    onProgress?.({
+      step: 2,
+      totalSteps: 3,
+      message: `阶段划分完成，正在根据目录提炼全书核心知识大纲与 DAG 拓扑（按需解锁模式，秒级建树）...`,
+      percent: 60,
+    });
+
+    const step2System = `你是一位顶级知识拓扑架构师与课程设计师。
+请根据全书目录与阶段规划，为《${topicName}》提取 8~16 个核心攻坚知识节点（Tasks），并推演各节点之间的前置依赖关系（Dependencies）。
+每个节点必须包含：
+- id: 唯一标识（例如 "t_1", "t_2"）
+- title: 节点标题（标明关键技术点）
+- milestoneId: 归属的阶段 ID（如 "m1", "m2"）
+- chapterIndex: 对应的章节编号（整数，如 1, 2）
+- summary: 1~2 句话的核心攻坚方向与概念摘要
+- priority: "critical" | "high" | "medium"
+- tags: 核心标签数组（必须包含类似 "第X章" 的标签）
+
+同时输出有向无环图依赖边数组 dependencies: [{ source: "前置id", target: "后置id" }]。
+
+【输出格式】纯 JSON：
+{
+  "tasks": [
+    {
+      "id": "t_1",
+      "title": "栈帧平衡与函数调用约定",
+      "milestoneId": "m1",
+      "chapterIndex": 1,
+      "summary": "掌握栈底指针与栈顶指针在函数调用、参数传递及返回过程中的底层平衡原理",
+      "priority": "critical",
+      "tags": ["第1章", "底层调用"]
+    }
+  ],
+  "dependencies": [
+    { "source": "t_1", "target": "t_2" }
+  ]
+}`;
+
+    const step2User = `【书籍信息】：
+书名：《${bookData.title}》
+章节总数：${bookData.chapter_count} 个章节
+规划好的阶段列表：
+${JSON.stringify(milestones, null, 2)}
+
+【章节详细目录与简介】：
+${bookData.chapters.map(c => `第 ${c.index} 章: ${c.title} (页码: ${c.page_range})\n简介摘录: ${c.sample_content.slice(0, 160)}`).join('\n\n')}
+
+请立即输出 tasks 与 dependencies 纯 JSON。`;
+
+    let allTasks: Array<{
       id: string;
       title: string;
       description: string;
@@ -241,107 +290,58 @@ ${chapterListBrief}
       tags: string[];
     }> = [];
 
-    // Process up to 16 chapters so full 15-chapter textbooks are completely covered
-    const selectedChapters = bookData.chapters.slice(0, 16);
-    const totalChaptersToProcess = selectedChapters.length;
+    let dependencies: Array<{ source: string; target: string; type?: string }> = [];
 
-    for (let i = 0; i < totalChaptersToProcess; i++) {
-      const ch = selectedChapters[i];
-      const milestoneId = chapterToMilestoneMap[ch.index] || milestones[Math.min(milestones.length - 1, Math.floor((i / totalChaptersToProcess) * milestones.length))]?.id || 'm1';
+    try {
+      const step2Result = await callLLM(step2System, step2User);
+      const rawTasks = step2Result.tasks || [];
+      dependencies = step2Result.dependencies || [];
 
-      onProgress?.({
-        step: 2,
-        totalSteps: 4,
-        message: `正在精读第 ${i + 1}/${totalChaptersToProcess} 章《${ch.title.slice(0, 20)}》并沉淀原书讲义...`,
-        percent: Math.round(20 + 60 * ((i + 1) / totalChaptersToProcess)),
-      });
+      if (rawTasks.length > 0) {
+        rawTasks.forEach((t: any, idx: number) => {
+          const chIdx = typeof t.chapterIndex === 'number' ? t.chapterIndex : idx + 1;
+          const ch = bookData.chapters.find(c => c.index === chIdx) || bookData.chapters[Math.min(idx, bookData.chapters.length - 1)];
+          const chTitle = ch?.title || `第 ${chIdx} 章`;
+          const chPageRange = ch?.page_range || '全书';
 
-      const step2System = `你是一位严谨的教材精讲导师。
-你的任务是研读用户给出的教材章节内容，提炼出 1~3 个具体的硬核知识节点（Tasks）。
-每个节点必须生成详尽、排版考究、专业深入的讲义内容（Markdown 格式）：
-包含：
-### 一、核心机制与底层原理
-（用生活比喻结合底层原理剖析）
-### 二、关键代码与应用场景
-（提炼教材中的核心伪代码、指令或场景示例）
-### 三、易错陷阱与实操考核
-（指出初学者极易踩坑的地方，并给出一道动手练习题）
+          const initialDescription = `### 📖 章节定位\n归属原书：第 ${chIdx} 章《${chTitle}》（页码范围：${chPageRange}）\n\n### 🎯 学习目标与攻坚方向\n${t.summary || '掌握本章节的核心技术机制与体系逻辑。'}\n\n---\n> 💡 **Gemini 专属学伴导学**：本节点已就绪！点击上方「💎 唤醒 Gemini 导师深度精讲」，即可调用 Gemini 3.8 Flash 结合本章教材原书正文生成生动通透的系统化讲义。`;
 
-【输出格式】必须为纯 JSON：
-{
-  "tasks": [
-    {
-      "title": "节点标题（例如：栈帧动态平衡与调用约定）",
-      "description": "上述三大结构的完整 Markdown 讲义内容...",
-      "priority": "critical" 或 "high" 或 "medium",
-      "tags": ["核心标签1", "标签2"]
-    }
-  ]
-}`;
+          const tags = Array.isArray(t.tags) && t.tags.length > 0 ? t.tags : [`第${chIdx}章`, '核心考点'];
+          if (!tags.some((tag: string) => tag.includes('章'))) {
+            tags.unshift(`第${chIdx}章`);
+          }
 
-      const step2User = `【章节信息】：
-所属章节：第 ${ch.index} 章 - ${ch.title}
-页码范围：${ch.page_range}
-
-【原书章节正文切片】：
-${ch.sample_content || ch.title}
-
-请立即输出本章提炼的 tasks JSON。`;
-
-      try {
-        const step2Result = await callLLM(step2System, step2User);
-        const chapterTasks = step2Result.tasks || [];
-        chapterTasks.forEach((t: any, taskIdx: number) => {
           allTasks.push({
-            id: `t_${ch.index}_${taskIdx + 1}`,
-            title: t.title || `${ch.title} - 知识点 ${taskIdx + 1}`,
-            description: t.description || `本节点属于第 ${ch.index} 章《${ch.title}》核心教学范畴。`,
-            milestoneId,
+            id: t.id || `t_${idx + 1}`,
+            title: t.title || `${chTitle} - 核心知识点`,
+            description: initialDescription,
+            milestoneId: t.milestoneId || chapterToMilestoneMap[chIdx] || milestones[0]?.id || 'm1',
             priority: t.priority || 'high',
-            tags: Array.isArray(t.tags) && t.tags.length > 0 ? t.tags : [ch.title.slice(0, 6)],
+            tags,
           });
         });
-      } catch (err) {
-        // Fallback single task for chapter
-        allTasks.push({
-          id: `t_${ch.index}_1`,
-          title: ch.title,
-          description: `### 一、核心机制与底层原理\n\n本章节摘录自《${bookData.title}》第 ${ch.index} 章。\n\n### 二、关键原书内容\n\n${ch.sample_content.slice(0, 1000)}\n\n### 三、动手实操\n\n请结合原书练习题进行实操验证。`,
-          milestoneId,
-          priority: 'high',
-          tags: ['章节核心'],
-        });
       }
+    } catch (err) {
+      console.warn('One-pass DAG generation failed, falling back to chapter outline mapping:', err);
     }
 
-    // ========================================================
-    // Step 3: Dependency Graph Inference (全景依赖拓扑推演)
-    // ========================================================
-    onProgress?.({
-      step: 3,
-      totalSteps: 4,
-      message: `已提炼出 ${allTasks.length} 个核心攻坚节点，正在分析前后置依赖逻辑构建有向无环拓扑图 (DAG)...`,
-      percent: 88,
-    });
+    // Fallback if model returned empty tasks
+    if (allTasks.length === 0) {
+      bookData.chapters.forEach((ch, idx) => {
+        const msId = chapterToMilestoneMap[ch.index] || milestones[Math.min(milestones.length - 1, Math.floor((idx / bookData.chapters.length) * milestones.length))]?.id || 'm1';
+        allTasks.push({
+          id: `t_${ch.index}`,
+          title: `第 ${ch.index} 章: ${ch.title}`,
+          description: `### 📖 章节定位\n归属原书：第 ${ch.index} 章《${ch.title}》（页码范围：${ch.page_range}）\n\n### 🎯 学习目标与攻坚方向\n深入掌握第 ${ch.index} 章《${ch.title}》的核心原理与技术要点。\n\n---\n> 💡 **Gemini 专属学伴导学**：本节点已就绪！点击上方「💎 唤醒 Gemini 导师深度精讲」，即可调用 Gemini 3.8 Flash 结合本章教材原书正文生成生动通透的系统化讲义。`,
+          milestoneId: msId,
+          priority: 'high',
+          tags: [`第${ch.index}章`, '原书章节'],
+        });
+      });
+    }
 
-    const taskBriefs = allTasks.map(t => ({ id: t.id, title: t.title }));
-    const step3System = `你是一位知识拓扑架构师。
-请分析以下知识节点之间的前置先后依赖关系（先学会哪个，才能攻克哪个）。
-输出有向依赖边数组，必须保证为有向无环图（DAG），不要产生循环引用。
-
-【输出格式】纯 JSON：
-{
-  "dependencies": [
-    { "source": "前置节点id", "target": "后置节点id", "type": "prerequisite" }
-  ]
-}`;
-
-    let dependencies: Array<{ source: string; target: string; type?: string }> = [];
-    try {
-      const step3Result = await callLLM(step3System, JSON.stringify(taskBriefs));
-      dependencies = step3Result.dependencies || [];
-    } catch {
-      // Linear sequential fallback
+    // Fallback linear dependencies if empty
+    if (dependencies.length === 0) {
       for (let i = 0; i < allTasks.length - 1; i++) {
         dependencies.push({
           source: allTasks[i].id,
@@ -352,9 +352,9 @@ ${ch.sample_content || ch.title}
     }
 
     onProgress?.({
-      step: 4,
-      totalSteps: 4,
-      message: '全景技能树构建完成，正在加载排版视图！',
+      step: 3,
+      totalSteps: 3,
+      message: '全景技能树与拓扑关系构建完成，正在加载排版视图！',
       percent: 100,
     });
 

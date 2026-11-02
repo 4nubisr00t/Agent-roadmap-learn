@@ -650,7 +650,7 @@ const App: React.FC = () => {
     } catch {}
 
     setIsEnrichingTask(true);
-    setEnrichStatusText('AI 正在研读私有资料库教材与核心大纲...');
+    setEnrichStatusText('Gemini 3.8 Flash 导师正在调阅教材原书，为你生成生动透彻的专属伴学讲义...');
 
     try {
       const res = await fetch('/api/ai/enrich-task', {
@@ -659,10 +659,10 @@ const App: React.FC = () => {
         body: JSON.stringify({
           projectId: selectedProject,
           taskId: editingTask.id,
-          provider: aiConfig?.buildEngine?.providerId || aiConfig?.providerId,
-          baseUrl: aiConfig?.buildEngine?.baseUrl || aiConfig?.baseUrl,
-          apiKey: aiConfig?.buildEngine?.apiKey || aiConfig?.apiKey,
-          model: aiConfig?.buildEngine?.model || aiConfig?.model,
+          provider: aiConfig?.mentorEngine?.providerId || aiConfig?.providerId,
+          baseUrl: aiConfig?.mentorEngine?.baseUrl || aiConfig?.baseUrl,
+          apiKey: aiConfig?.mentorEngine?.apiKey || aiConfig?.apiKey,
+          model: aiConfig?.mentorEngine?.model || aiConfig?.model,
         }),
       });
 
@@ -2347,14 +2347,14 @@ const App: React.FC = () => {
                   {isEnrichingTask ? (
                     <>
                       <span className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
-                      <span className="hidden sm:inline">{enrichStatusText || 'AI 正在研读撰写...'}</span>
+                      <span className="hidden sm:inline">{enrichStatusText || 'Gemini 导师研读撰写中...'}</span>
                       <span className="sm:hidden">研读中...</span>
                     </>
                   ) : (
                     <>
                       <IconSparkles className="w-3.5 h-3.5 text-zinc-950" />
-                      <span className="hidden sm:inline">⚡ AI 读资料点亮填充</span>
-                      <span className="sm:hidden">⚡ AI填充</span>
+                      <span className="hidden sm:inline">💎 Gemini 导师精讲点亮</span>
+                      <span className="sm:hidden">💎 Gemini精讲</span>
                     </>
                   )}
                 </button>
@@ -2491,15 +2491,15 @@ const App: React.FC = () => {
                     </div>
                   )}
 
-                  {!editingTask.description || editingTask.description.trim().length < 30 ? (
+                  {!editingTask.description || editingTask.description.includes('💡 **Gemini 专属') || editingTask.description.includes('💡 **智能点亮') || editingTask.description.trim().length < 150 ? (
                     <div className="p-8 rounded-2xl bg-gradient-to-br from-amber-500/10 via-zinc-900 to-zinc-950 border border-amber-500/30 text-center space-y-4 my-4 shadow-xl">
                       <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10">
                         <IconSparkles className="w-6 h-6" />
                       </div>
                       <div className="space-y-1">
-                        <h3 className="text-base font-black text-zinc-100">该学习节点尚未生成详细讲义</h3>
+                        <h3 className="text-base font-black text-zinc-100">该学习节点已就绪，等待唤醒 Gemini 导师精讲</h3>
                         <p className="text-xs text-zinc-400 max-w-md mx-auto">
-                          一键点亮此模块，AI 导师将自动研读私有资料库中的教材与大纲，为您深度提炼核心原理解析、典型实操代码与阶段过关自测题！
+                          按需解锁，拒绝无谓 Token 消耗！一键唤醒 Gemini 3.8 Flash 导师，结合本章教材原书正文，为你生成生动通透、极富人情味的沉浸式讲义（支持生活比喻、LaTeX公式推演与课后自测题）！
                         </p>
                       </div>
                       <button
@@ -2511,12 +2511,12 @@ const App: React.FC = () => {
                         {isEnrichingTask ? (
                           <>
                             <span className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
-                            <span>{enrichStatusText || 'AI 导师正在研读教材并撰写讲义...'}</span>
+                            <span>{enrichStatusText || 'Gemini 3.8 Flash 导师正在研读教材并撰写讲义...'}</span>
                           </>
                         ) : (
                           <>
                             <IconLightning className="w-4 h-4 text-zinc-950" />
-                            <span>🌟 立即点亮并由 AI 研读资料填充卡片</span>
+                            <span>💎 唤醒 Gemini 3.8 Flash 导师深度精讲</span>
                           </>
                         )}
                       </button>

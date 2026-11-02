@@ -1,3 +1,6 @@
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import https from 'https';
+
 export interface AIProviderPreset {
   id: string;
   name: string;
@@ -10,7 +13,28 @@ export interface AIProviderPreset {
   websiteUrl?: string;
 }
 
+export const DEFAULT_HUMAN_MENTOR_PROMPT = `你是一位极富人情味、生动透彻、通俗且直击底层本质的大学顶尖伴学导师。
+你的教学风格像坐在学生身旁的亲切师兄兼资深讲师：
+1. 【人情味与温度】：绝不冷冰冰地罗列八股文，用亲近、鼓励、启发式的语言与学生交流；
+2. 【生活比喻与底层推导】：多用接地气的生活现实比喻，深入浅出地解释晦涩概念，同时对核心底层原理推演到底；
+3. 【专业排版规范】：
+   - 涉及数学或物理公式推导，必须输出标准 LaTeX 格式（行内公式用 $...$，独立块级公式用 $$...$$）；
+   - 涉及数据流、状态转移或系统架构，输出规范的标准 Mermaid 图表 (\`\`\`mermaid ... \`\`\`)；
+   - 涉及代码给出精炼、带中文注释的典型实现；
+4. 【互动式思维启发】：在讲授核心知识的同时，引导学生主动思考“为什么系统要这样设计”。`;
+
 export const PRESET_PROVIDERS: AIProviderPreset[] = [
+  {
+    id: 'vertex-gemini',
+    name: 'Google Vertex AI (Gemini 3.8 Flash 专属伴学)',
+    icon: '💎',
+    baseUrl: 'https://aiplatform.googleapis.com/v1/publishers/google/models',
+    defaultModel: 'gemini-3.8-flash',
+    models: ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'],
+    description: 'Google Cloud Vertex AI 专属极速通道，Gemini 3.8 Flash 最具人情味、响应如闪电',
+    needApiKey: true,
+    websiteUrl: 'https://console.cloud.google.com/vertex-ai',
+  },
   {
     id: 'anubis-gateway',
     name: 'Anubis DeepSeek Gateway (自有反代网关)',
@@ -160,14 +184,232 @@ export class AIService {
     return `${clean}/chat/completions`;
   }
 
+  private getProxyAgent(): HttpsProxyAgent<string> | undefined {
+    const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || 'http://127.0.0.1:7890';
+    try {
+      return new HttpsProxyAgent(proxyUrl);
+    } catch {
+      return undefined;
+    }
+  }
+
+  isVertexProvider(provider?: string, baseUrl?: string, apiKey?: string): boolean {
+    if (provider === 'vertex-gemini') return true;
+    if (baseUrl && baseUrl.includes('aiplatform.googleapis.com')) return true;
+    if (apiKey && apiKey.startsWith('AQ.')) return true;
+    return false;
+  }
+
+  /**
+   * Directly invoke Google Cloud Vertex AI Express Mode with API Key (AQ....)
+   */
+  async callVertexExpress(options: {
+    model: string;
+    apiKey: string;
+    messages: ChatMessage[];
+    systemPrompt?: string;
+    temperature?: number;
+  }): Promise<string> {
+    const { model, apiKey, messages, systemPrompt, temperature } = options;
+    const targetModel = model || 'gemini-3.8-flash';
+    const url = `https://aiplatform.googleapis.com/v1/publishers/google/models/${targetModel}:generateContent`;
+    const u = new URL(url);
+    const agent = this.getProxyAgent();
+
+    let systemText = systemPrompt || '';
+    const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+
+    for (const m of messages) {
+      if (m.role === 'system') {
+        systemText += (systemText ? '\n\n' : '') + m.content;
+      } else {
+        contents.push({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        });
+      }
+    }
+    if (contents.length === 0) {
+      contents.push({ role: 'user', parts: [{ text: '你好' }] });
+    }
+
+    const payload: any = {
+      contents,
+      generationConfig: {
+        temperature: temperature ?? 0.7,
+      },
+    };
+    if (systemText) {
+      payload.system_instruction = { parts: [{ text: systemText }] };
+    }
+
+    return new Promise((resolve, reject) => {
+      const req = https.request(
+        {
+          protocol: u.protocol,
+          hostname: u.hostname,
+          port: 443,
+          path: u.pathname + u.search,
+          method: 'POST',
+          agent,
+          headers: {
+            'x-goog-api-key': apiKey,
+            'Content-Type': 'application/json',
+          },
+        },
+        (res) => {
+          let body = '';
+          res.on('data', (chunk) => (body += chunk));
+          res.on('end', () => {
+            if (res.statusCode && res.statusCode >= 400) {
+              let errMsg = `Vertex AI Error (HTTP ${res.statusCode})`;
+              try {
+                const errJson = JSON.parse(body);
+                if (errJson.error?.message) errMsg = errJson.error.message;
+              } catch {}
+              return reject(new Error(errMsg));
+            }
+            try {
+              const data = JSON.parse(body);
+              const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+              resolve(text);
+            } catch (err: any) {
+              reject(new Error(`解析 Vertex AI 响应失败: ${err.message}`));
+            }
+          });
+        }
+      );
+      req.on('error', reject);
+      req.write(JSON.stringify(payload));
+      req.end();
+    });
+  }
+
+  /**
+   * Stream Google Cloud Vertex AI Express Mode as standard OpenAI SSE format
+   */
+  async streamVertexExpress(options: {
+    model: string;
+    apiKey: string;
+    messages: ChatMessage[];
+    systemPrompt?: string;
+    temperature?: number;
+  }): Promise<Response> {
+    const { model, apiKey, messages, systemPrompt, temperature } = options;
+    const targetModel = model || 'gemini-3.8-flash';
+    const url = `https://aiplatform.googleapis.com/v1/publishers/google/models/${targetModel}:streamGenerateContent?alt=sse`;
+    const u = new URL(url);
+    const agent = this.getProxyAgent();
+
+    let systemText = systemPrompt || '';
+    const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+
+    for (const m of messages) {
+      if (m.role === 'system') {
+        systemText += (systemText ? '\n\n' : '') + m.content;
+      } else {
+        contents.push({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        });
+      }
+    }
+    if (contents.length === 0) {
+      contents.push({ role: 'user', parts: [{ text: '你好' }] });
+    }
+
+    const payload: any = {
+      contents,
+      generationConfig: {
+        temperature: temperature ?? 0.7,
+      },
+    };
+    if (systemText) {
+      payload.system_instruction = { parts: [{ text: systemText }] };
+    }
+
+    return new Promise((resolve, reject) => {
+      const req = https.request(
+        {
+          protocol: u.protocol,
+          hostname: u.hostname,
+          port: 443,
+          path: u.pathname + u.search,
+          method: 'POST',
+          agent,
+          headers: {
+            'x-goog-api-key': apiKey,
+            'Content-Type': 'application/json',
+          },
+        },
+        (res) => {
+          let buffer = '';
+          const stream = new ReadableStream({
+            start(controller) {
+              res.on('data', (chunk) => {
+                buffer += chunk.toString();
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+                for (const line of lines) {
+                  const trimmed = line.trim();
+                  if (trimmed.startsWith('data: ')) {
+                    try {
+                      const data = JSON.parse(trimmed.slice(6));
+                      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                      if (text) {
+                        const sseChunk = `data: ${JSON.stringify({
+                          choices: [{ delta: { content: text } }],
+                        })}\n\n`;
+                        controller.enqueue(new TextEncoder().encode(sseChunk));
+                      }
+                    } catch {}
+                  }
+                }
+              });
+              res.on('end', () => {
+                controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+                controller.close();
+              });
+              res.on('error', (err) => controller.error(err));
+            },
+          });
+
+          resolve(
+            new Response(stream, {
+              status: res.statusCode || 200,
+              headers: {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+              },
+            })
+          );
+        }
+      );
+      req.on('error', reject);
+      req.write(JSON.stringify(payload));
+      req.end();
+    });
+  }
+
   resolveCredentials(config: { provider?: string; baseUrl?: string; apiKey?: string; model?: string }): {
     baseUrl: string;
     apiKey: string;
     model: string;
   } {
     const ANUBIS_GATEWAY_KEY = 'sk-0448f4d2aacffacf756d555794703bf3d13f2487259d98da';
+    const VERTEX_EXPRESS_KEY = process.env.VERTEX_API_KEY || process.env.GEMINI_API_KEY || '';
     const isLinuxHost = process.platform === 'linux';
     const defaultGatewayUrl = isLinuxHost ? 'http://127.0.0.1:8000/v1' : 'https://api.anubisroot.top/v1';
+
+    // Check Vertex AI Express provider first
+    if (this.isVertexProvider(config.provider, config.baseUrl, config.apiKey)) {
+      return {
+        baseUrl: 'https://aiplatform.googleapis.com/v1/publishers/google/models',
+        apiKey: config.apiKey || VERTEX_EXPRESS_KEY,
+        model: config.model && config.model.startsWith('gemini') ? config.model : 'gemini-3.8-flash',
+      };
+    }
 
     // Auto-migrate legacy default key or empty provider to Anubis Gateway
     const isLegacyDefault =
@@ -232,6 +474,30 @@ export class AIService {
     error?: string;
   }> {
     const creds = this.resolveCredentials(config);
+
+    if (this.isVertexProvider(config.provider, creds.baseUrl, creds.apiKey)) {
+      const start = Date.now();
+      try {
+        const reply = await this.callVertexExpress({
+          model: creds.model || 'gemini-3.8-flash',
+          apiKey: creds.apiKey,
+          messages: [{ role: 'user', content: '测试连接，请回复一句话' }],
+          temperature: 0.1,
+        });
+        return {
+          success: true,
+          latencyMs: Date.now() - start,
+          reply: reply.slice(0, 100),
+        };
+      } catch (err: any) {
+        return {
+          success: false,
+          latencyMs: Date.now() - start,
+          error: err.message || 'Vertex AI 连接超时或未获授权',
+        };
+      }
+    }
+
     if (!creds.baseUrl) {
       return { success: false, error: '缺少 Base URL' };
     }
@@ -292,11 +558,13 @@ export class AIService {
     error?: string;
   }> {
     const creds = this.resolveCredentials(config);
-    let cleanBase = creds.baseUrl.trim().replace(/\/+$/, '');
-    if (cleanBase.endsWith('/chat/completions')) {
-      cleanBase = cleanBase.replace('/chat/completions', '');
+
+    if (this.isVertexProvider(config.provider, creds.baseUrl, creds.apiKey)) {
+      return {
+        success: true,
+        models: ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'],
+      };
     }
-    const endpoint = `${cleanBase}/models`;
 
     try {
       const headers: Record<string, string> = {
@@ -347,6 +615,16 @@ export class AIService {
 
   async streamChat(config: AIRequestConfig): Promise<Response> {
     const creds = this.resolveCredentials(config);
+
+    if (this.isVertexProvider(config.provider, creds.baseUrl, creds.apiKey)) {
+      return await this.streamVertexExpress({
+        model: creds.model || 'gemini-3.8-flash',
+        apiKey: creds.apiKey,
+        messages: config.messages,
+        temperature: config.temperature ?? 0.7,
+      });
+    }
+
     if (!creds.baseUrl) {
       throw new Error('未配置 AI 供应商或 Base URL');
     }
@@ -524,29 +802,32 @@ export class AIService {
       headers['Authorization'] = `Bearer ${creds.apiKey}`;
     }
 
-    const systemPrompt = `你是一位世界顶级的专业技术导师与教材编委会主编。
-学员正在学习《${options.projectTopic || '专属学习技能树'}》中的核心攻坚节点：【${options.taskTitle}】。
-你的任务是研读用户提供的教材/参考资料内容，为该节点撰写极其详尽、干货密集、条理清晰的系统化讲义（Markdown 格式）。
+    const systemPrompt = `你是一位极富人情味、生动透彻、通俗且直击底层本质的大学顶尖伴学导师。
+学员正在攻读《${options.projectTopic || '专属学习技能树'}》中的核心攻坚节点：【${options.taskTitle}】。
 难度目标定位：${options.targetLevel || '零基础到实战精通'}。
 
+你的任务是结合用户提供的教材章节切片，为该节点撰写一份富有温度、深入浅出、干货密集的专属精讲讲义（Markdown 格式）：
+
 【讲义内容必须包含以下 5 个标准模块】：
-### 🎯 1. 核心攻坚目标与概念定义
-- 用通俗生动的大白话拆解该技术的底层逻辑、现实应用场景，以及为什么在技能树中处于该关键位置。
+### 🎯 1. 核心攻坚目标与直觉概念
+- 像坐在学生身旁一样，用生活大白话比喻拆解该技术的底层逻辑，解释现实应用中为什么要设计这个机制，扫清认知畏难感。
 
-### 📖 2. 深度讲义与核心原理解析
-- 紧密结合提供的教材与资料，深入浅出地剖析核心机制与内部运作原理，重点概念加粗说明。
+### 📖 2. 深度讲义与底层原理解析
+- 紧密结合教材原书切片深入剖析核心机制。
+- 涉及数学或物理公式推导，必须输出标准 LaTeX 格式（行内用 $...$，独立块级公式用 $$...$$）。
+- 涉及流程流转、状态转移或硬件架构，输出规范的 Mermaid 图表代码块 (\`\`\`mermaid ... \`\`\`)。
 
-### 💻 3. 典型代码与实战复现步骤
-- 给出完备、可运行或可动手验证的代码案例、实验步骤或命令流程，附带关键代码逐行详细注解。
+### 💻 3. 典型代码与关键指令拆解
+- 给出完备、可动手验证的指令流水/伪代码/核心代码片段，附带详细中文逐行注释。
 
-### ⚠️ 4. 关键避坑与高频盲点
-- 总结初学者最容易犯错、踩坑或混淆的 2~3 个关键要点与调试经验。
+### ⚠️ 4. 学长避坑指南与常见认知误区
+- 总结初学者最容易踩坑或混淆的 2~3 个关键盲区与调试心得。
 
-### ❓ 5. 阶段过关自测题
-- 设计 2 道思考问答题或实操挑战题，并附带简要思路指引，帮助学员自我检测过关。
+### ❓ 5. 闯关自测与思考挑战
+- 设计 2 道带思考深度的自测题或动手小练习，并附带思路启发，帮助学员自我检测过关。
 
 【格式要求】：
-直接输出格式优美的 Markdown 内容，不要有前言寒暄，不要在最外层包裹 \`\`\`markdown 代码块。`;
+直接输出格式优美的 Markdown 内容，禁止在最外层包裹 \`\`\`markdown 代码块。`;
 
     let userPrompt = `【节点标题】：${options.taskTitle}\n`;
     if (options.taskDescription) {
@@ -556,6 +837,25 @@ export class AIService {
       userPrompt += `【学员特殊定制要求】：\n${options.focusPrompt}\n\n`;
     }
     userPrompt += `【相关教材/参考资料研读摘录】：\n${options.materialSnippets.slice(0, 16000)}\n\n请立即研读以上资料，为【${options.taskTitle}】生成完整的深度系统化讲义。`;
+
+    // Fast-path: Google Cloud Vertex AI Express
+    if (this.isVertexProvider(options.provider, creds.baseUrl, creds.apiKey)) {
+      const rawContent = await this.callVertexExpress({
+        model: creds.model || 'gemini-3.8-flash',
+        apiKey: creds.apiKey,
+        messages: [{ role: 'user', content: userPrompt }],
+        systemPrompt,
+        temperature: 0.5,
+      });
+
+      let content = rawContent.trim();
+      if (content.startsWith('```markdown')) {
+        content = content.replace(/^```markdown\s*/i, '').replace(/\s*```$/, '');
+      } else if (content.startsWith('```')) {
+        content = content.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+      return content.trim();
+    }
 
     const res = await fetch(endpoint, {
       method: 'POST',
@@ -644,6 +944,25 @@ export class AIService {
       userPrompt += `【所在段落上下文】：\n${options.contextText.slice(0, 1000)}\n\n`;
     }
     userPrompt += `请立即为我答疑解惑：`;
+
+    // Fast-path: Google Cloud Vertex AI Express
+    if (this.isVertexProvider(options.provider, creds.baseUrl, creds.apiKey)) {
+      const rawContent = await this.callVertexExpress({
+        model: creds.model || 'gemini-3.8-flash',
+        apiKey: creds.apiKey,
+        messages: [{ role: 'user', content: userPrompt }],
+        systemPrompt,
+        temperature: 0.3,
+      });
+
+      let content = rawContent.trim();
+      if (content.startsWith('```markdown')) {
+        content = content.replace(/^```markdown\s*/i, '').replace(/\s*```$/, '');
+      } else if (content.startsWith('```')) {
+        content = content.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+      return content.trim();
+    }
 
     const res = await fetch(endpoint, {
       method: 'POST',

@@ -39,20 +39,30 @@ export const DEFAULT_BUILD_ENGINE: EngineConfig = {
   model: 'deepseek-v4.1-flash',
 };
 
+export const DEFAULT_HUMAN_MENTOR_PROMPT = `你是一位极富人情味、生动透彻、通俗且直击底层本质的大学顶尖伴学导师。
+你的教学风格像坐在学生身旁的亲切师兄兼资深讲师：
+1. 【人情味与温度】：绝不冷冰冰地罗列八股文，用亲近、鼓励、启发式的语言与学生交流；
+2. 【生活比喻与底层推导】：多用接地气的生活现实比喻，深入浅出地解释晦涩概念，同时对核心底层原理推演到底；
+3. 【专业排版规范】：
+   - 涉及数学或物理公式推导，必须输出标准 LaTeX 格式（行内公式用 $...$，独立块级公式用 $$...$$）；
+   - 涉及数据流、状态转移或系统架构，输出规范的标准 Mermaid 图表 (\`\`\`mermaid ... \`\`\`)；
+   - 涉及代码给出精炼、带中文注释的典型实现；
+4. 【互动式思维启发】：在讲授核心知识的同时，引导学生主动思考“为什么系统要这样设计”。`;
+
 export const DEFAULT_MENTOR_ENGINE: EngineConfig = {
-  providerId: 'gemini',
-  baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+  providerId: 'vertex-gemini',
+  baseUrl: 'https://aiplatform.googleapis.com/v1/publishers/google/models',
   apiKey: '',
-  model: 'gemini-2.0-flash',
+  model: 'gemini-3.8-flash',
 };
 
 const DEFAULT_SETTINGS: AISettingsState = {
-  providerId: 'anubis-gateway',
-  baseUrl: 'https://api.anubisroot.top/v1',
-  apiKey: 'sk-0448f4d2aacffacf756d555794703bf3d13f2487259d98da',
-  model: 'deepseek-v4.1-flash',
+  providerId: 'vertex-gemini',
+  baseUrl: 'https://aiplatform.googleapis.com/v1/publishers/google/models',
+  apiKey: '',
+  model: 'gemini-3.8-flash',
   temperature: 0.7,
-  systemPromptPreset: 'pwn',
+  systemPromptPreset: 'mentor',
   customSystemPrompt: '',
   buildEngine: DEFAULT_BUILD_ENGINE,
   mentorEngine: DEFAULT_MENTOR_ENGINE,
@@ -62,18 +72,10 @@ const normalizeSavedSettings = (parsed: any): AISettingsState => {
   if (!parsed || parsed.apiKey === 'sk-8edbc2d2456045068188e41b02d6d1b7') {
     return DEFAULT_SETTINGS;
   }
-  const buildEngine = parsed.buildEngine || {
-    providerId: 'anubis-gateway',
-    baseUrl: 'https://api.anubisroot.top/v1',
-    apiKey: 'sk-0448f4d2aacffacf756d555794703bf3d13f2487259d98da',
-    model: 'deepseek-v4.1-flash',
-  };
-  const mentorEngine = parsed.mentorEngine || {
-    providerId: parsed.providerId || 'anubis-gateway',
-    baseUrl: parsed.baseUrl || 'https://api.anubisroot.top/v1',
-    apiKey: parsed.apiKey || 'sk-0448f4d2aacffacf756d555794703bf3d13f2487259d98da',
-    model: parsed.model || 'deepseek-v4.1-flash',
-  };
+  const buildEngine = parsed.buildEngine || DEFAULT_BUILD_ENGINE;
+  const mentorEngine = parsed.mentorEngine && parsed.mentorEngine.providerId === 'vertex-gemini'
+    ? parsed.mentorEngine
+    : DEFAULT_MENTOR_ENGINE;
 
   return {
     ...DEFAULT_SETTINGS,
@@ -84,9 +86,10 @@ const normalizeSavedSettings = (parsed: any): AISettingsState => {
 };
 
 export const SYSTEM_PROMPTS = {
-  pwn: '你是一位资深的计算机底层与系统架构导师。请遵循苏格拉底式启发教学法，用生动的比喻结合底层原理剖析核心机制。在给出答案前，先引导学生思考底层时序、逻辑与架构。',
-  fullstack: '你是一位资深全栈架构师与工程专家。擅长系统设计、代码质量重构与核心技术底层原理剖析。回答清晰、结构严谨，给出最佳实践与生产级代码示例。',
-  socratic: '你是一位善于启发思考的学习导师。永远不直接把答案塞给学生，而是通过连环追问、类比举例和概念引导，带领学生自主推导出底层真理。',
+  mentor: DEFAULT_HUMAN_MENTOR_PROMPT,
+  pwn: DEFAULT_HUMAN_MENTOR_PROMPT,
+  fullstack: DEFAULT_HUMAN_MENTOR_PROMPT,
+  socratic: DEFAULT_HUMAN_MENTOR_PROMPT,
   custom: '',
 };
 
@@ -542,46 +545,27 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
             </div>
           </div>
 
-          {/* System Prompt Preset (Applied for Mentor) */}
+          {/* Empathetic Mentor Persona Info */}
           {activeSlot === 'mentor' && (
-            <div>
-              <label className="block text-xs font-bold text-zinc-300 mb-1.5">
-                伴学教学指导风格
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSettings({ ...settings, systemPromptPreset: 'pwn' })}
-                  className={`p-2.5 rounded-xl border text-left text-xs font-bold transition-all active:scale-95 ${
-                    settings.systemPromptPreset === 'pwn'
-                      ? 'border-amber-500/80 bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/40'
-                      : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:bg-zinc-800'
-                  }`}
-                >
-                  计算机底层与体系
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSettings({ ...settings, systemPromptPreset: 'fullstack' })}
-                  className={`p-2.5 rounded-xl border text-left text-xs font-bold transition-all active:scale-95 ${
-                    settings.systemPromptPreset === 'fullstack'
-                      ? 'border-amber-500/80 bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/40'
-                      : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:bg-zinc-800'
-                  }`}
-                >
-                  全栈工程与架构师
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSettings({ ...settings, systemPromptPreset: 'socratic' })}
-                  className={`p-2.5 rounded-xl border text-left text-xs font-bold transition-all active:scale-95 ${
-                    settings.systemPromptPreset === 'socratic'
-                      ? 'border-amber-500/80 bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/40'
-                      : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:bg-zinc-800'
-                  }`}
-                >
-                  苏格拉底式启发
-                </button>
+            <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-2.5">
+              <div className="flex items-center gap-2 text-xs font-black text-amber-300">
+                <IconSparkles className="w-4 h-4 text-amber-400" />
+                <span>Gemini 3.8 Flash 人味学伴导师（已默认激活）</span>
+              </div>
+              <p className="text-[11px] text-zinc-300 leading-relaxed">
+                无需繁琐的人格卡片切换，系统已内置人情味最浓、善用生活比喻、兼顾底层机制推导与 KaTeX / Mermaid 渲染的名师学伴设定。
+              </p>
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-400 mb-1">
+                  补充个性化偏好要求（选填）：
+                </label>
+                <input
+                  type="text"
+                  value={settings.customSystemPrompt || ''}
+                  onChange={(e) => setSettings({ ...settings, customSystemPrompt: e.target.value })}
+                  placeholder="例如：多对比 x86 体系，或结合具体攻防实操场景..."
+                  className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-700/80 rounded-xl focus:outline-none focus:border-amber-500 text-zinc-200 placeholder-zinc-500"
+                />
               </div>
             </div>
           )}
