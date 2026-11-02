@@ -43,3 +43,6 @@ temp/
 
 # Development plans
 .sisyphus/
+
+__pycache__/
+*.pyc

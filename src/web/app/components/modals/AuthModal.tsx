@@ -66,7 +66,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn"
+      className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 p-2 sm:p-4 animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
@@ -75,17 +75,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     >
       <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-zinc-800 gold-border-hover animate-slideUp">
         {/* Header */}
-        <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
+        <div className="p-4 sm:p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/10">
               <IconLock className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base font-black text-zinc-100 tracking-tight">
-                {mode === 'login' ? '账号鉴权登录' : '注册专属空间'}
+                {mode === 'login' ? '用户登录' : '注册新账号'}
               </h2>
               <p className="text-[11px] text-zinc-400 font-medium mt-0.5">
-                {mode === 'login' ? '登录以加载个人专属技能树与加密资料库' : '注册即刻享有物理级隔离的成长空间'}
+                {mode === 'login' ? '登录以加载您的个人专属学习路线与知识库' : '注册即刻享有完全独立的个人学习空间'}
               </p>
             </div>
           </div>
@@ -148,7 +148,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="请输入用户名（如 mom, 4nubisr00t）"
+              placeholder="请输入用户名（如 mom 或 anubis）"
               autoFocus
               className="w-full px-3.5 py-2.5 text-xs bg-zinc-950 border border-zinc-700/80 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-zinc-100 placeholder-zinc-500 font-medium"
             />

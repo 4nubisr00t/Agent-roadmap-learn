@@ -9,6 +9,9 @@ interface AIRoadmapGeneratorModalProps {
   preSelectedDocId?: string;
   preSelectedDocTitle?: string;
   onSuccess: (projectData: any) => void;
+  onBuildingProgress?: (step: string, percent: number, topicName: string) => void;
+  onBuildingComplete?: (projectData: any, topicName: string) => void;
+  onBuildingError?: (error: string) => void;
 }
 
 export const AIRoadmapGeneratorModal: React.FC<AIRoadmapGeneratorModalProps> = ({
@@ -17,6 +20,9 @@ export const AIRoadmapGeneratorModal: React.FC<AIRoadmapGeneratorModalProps> = (
   preSelectedDocId,
   preSelectedDocTitle,
   onSuccess,
+  onBuildingProgress,
+  onBuildingComplete,
+  onBuildingError,
 }) => {
   const [documents, setDocuments] = useState<UserDocumentSummary[]>([]);
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
@@ -25,6 +31,7 @@ export const AIRoadmapGeneratorModal: React.FC<AIRoadmapGeneratorModalProps> = (
   const [rawText, setRawText] = useState('');
   const [loading, setLoading] = useState(false);
   const [generationStep, setGenerationStep] = useState('');
+  const [progressPercent, setProgressPercent] = useState(0);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -79,44 +86,88 @@ export const AIRoadmapGeneratorModal: React.FC<AIRoadmapGeneratorModalProps> = (
     } catch {}
 
     setLoading(true);
-    setGenerationStep('正在研读教材结构与提取核心考点...');
+    setProgressPercent(5);
+    setGenerationStep('连接深度沙箱与解析引擎...');
 
     try {
-      setTimeout(() => {
-        setGenerationStep('AI 正在设计循序渐进的阶段里程碑与攻坚节点...');
-      }, 1500);
-
-      setTimeout(() => {
-        setGenerationStep('正在构建认知负荷与前置拓扑依赖关系图谱...');
-      }, 4000);
-
       const res = await fetch('/api/ai/generate-roadmap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          stream: true,
           documentIds: selectedDocIds,
           rawMaterialText: rawText.trim(),
           topicName: topicName.trim(),
           targetLevel,
-          provider: aiConfig?.providerId,
-          baseUrl: aiConfig?.baseUrl,
-          apiKey: aiConfig?.apiKey,
-          model: aiConfig?.model,
+          provider: aiConfig?.buildEngine?.providerId || aiConfig?.providerId,
+          baseUrl: aiConfig?.buildEngine?.baseUrl || aiConfig?.baseUrl,
+          apiKey: aiConfig?.buildEngine?.apiKey || aiConfig?.apiKey,
+          model: aiConfig?.buildEngine?.model || aiConfig?.model,
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || '生成失败，请检查网络或 AI 导师配置');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `请求失败 (${res.status})`);
       }
 
-      setGenerationStep('专属技能树构建成功，正在加载视图！');
+      if (!res.body) {
+        throw new Error('未接收到服务端流式数据');
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      let projectData: any = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const block of lines) {
+          const trimmed = block.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const jsonStr = trimmed.slice(5).trim();
+          if (!jsonStr) continue;
+          try {
+            const payload = JSON.parse(jsonStr);
+            if (payload.type === 'progress') {
+              setGenerationStep(payload.message || '正在处理...');
+              if (typeof payload.percent === 'number') {
+                setProgressPercent(payload.percent);
+                onBuildingProgress?.(payload.message, payload.percent, topicName);
+              }
+            } else if (payload.type === 'done') {
+              projectData = payload.data;
+              setProgressPercent(100);
+              setGenerationStep('专属知识图谱构建成功，正在载入！');
+              onBuildingComplete?.(projectData, topicName);
+            } else if (payload.type === 'error') {
+              onBuildingError?.(payload.error || '生成失败');
+              throw new Error(payload.error || '生成失败');
+            }
+          } catch (parseErr: any) {
+            if (parseErr.message && !parseErr.message.includes('Unexpected token')) {
+              throw parseErr;
+            }
+          }
+        }
+      }
+
+      if (!projectData) {
+        throw new Error('未接收到生成的项目数据');
+      }
+
       setTimeout(() => {
-        onSuccess(data.data);
+        onSuccess(projectData);
         onClose();
-      }, 800);
+      }, 600);
     } catch (err: any) {
       setError(err.message || '生成过程发生异常');
+      onBuildingError?.(err.message || '生成过程发生异常');
     } finally {
       setLoading(false);
     }
@@ -124,26 +175,26 @@ export const AIRoadmapGeneratorModal: React.FC<AIRoadmapGeneratorModalProps> = (
 
   return (
     <div
-      className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn"
+      className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 p-2 sm:p-4 animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget && !loading) {
           onClose();
         }
       }}
     >
-      <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden border border-zinc-800 gold-border-hover animate-slideUp flex flex-col max-h-[90vh]">
+      <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden border border-zinc-800 gold-border-hover animate-slideUp flex flex-col max-h-[96vh] sm:max-h-[90vh]">
         {/* Header */}
-        <div className="p-5 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
+        <div className="p-3.5 sm:p-5 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/10">
               <IconSparkles className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base font-black text-zinc-100 tracking-tight">
-                AI 基于教材资料一键建树
+                AI 研读资料构建知识图谱
               </h2>
               <p className="text-[11px] text-zinc-400 font-medium mt-0.5">
-                投喂教材或输入大纲，AI 导师自动提炼进阶里程碑与拓扑知识依赖图谱
+                投喂教材或参考大纲，由 AI 导师分析提取技能关卡与前后依赖图谱
               </p>
             </div>
           </div>
@@ -159,7 +210,7 @@ export const AIRoadmapGeneratorModal: React.FC<AIRoadmapGeneratorModalProps> = (
         </div>
 
         {/* Content Form */}
-        <form onSubmit={handleGenerate} className="p-6 space-y-4 overflow-y-auto flex-1">
+        <form onSubmit={handleGenerate} className="p-3.5 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
           {error && (
             <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-800/80 text-rose-300 text-xs font-semibold flex items-center gap-2.5">
               <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping flex-shrink-0" />
@@ -167,13 +218,29 @@ export const AIRoadmapGeneratorModal: React.FC<AIRoadmapGeneratorModalProps> = (
             </div>
           )}
 
-          {/* Loading Animation Box */}
+          {/* Loading Animation Box with Real-time Progress Bar */}
           {loading && (
-            <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-center space-y-3">
+            <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-center space-y-3 animate-fadeIn">
               <div className="w-10 h-10 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto" />
               <div className="text-xs font-black text-amber-300">{generationStep}</div>
-              <div className="text-[11px] text-zinc-500">
-                大模型正在深度解析知识层次，通常耗时 10~25 秒完成推理...
+              <div className="w-full bg-zinc-800 rounded-full h-2 overflow-hidden border border-zinc-700/50">
+                <div
+                  className="bg-gradient-to-r from-amber-500 to-amber-300 h-full transition-all duration-300 rounded-full"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <div className="text-[11px] text-zinc-400 flex justify-between px-1 font-mono">
+                <span>AI 沙箱深度解构建树中...</span>
+                <span>{progressPercent}%</span>
+              </div>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-1.5 rounded-xl bg-zinc-850 hover:bg-zinc-800 border border-amber-500/30 text-amber-300 text-xs font-bold transition-all shadow-sm active:scale-95"
+                >
+                  转入后台继续构建 (可自由浏览其他模块)
+                </button>
               </div>
             </div>
           )}

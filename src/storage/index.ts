@@ -177,8 +177,8 @@ export class ProjectStorage {
       const filePath = this.getFilePath(projectId);
       const projectData = await readJsonFile<ProjectData>(filePath);
 
-      // Multi-tenant isolation: If project belongs to a user, other users/guests cannot access it
-      if (projectData.project.userId && projectData.project.userId !== userId) {
+      // Multi-tenant isolation: If userId is explicitly provided, verify ownership
+      if (userId && projectData.project.userId && projectData.project.userId !== userId) {
         return null;
       }
 
@@ -207,7 +207,7 @@ export class ProjectStorage {
     userId?: string
   ): Promise<ProjectData | null> {
     return this.mutateProject(projectId, async (projectData) => {
-      if (projectData.project.userId && projectData.project.userId !== userId) {
+      if (userId && projectData.project.userId && projectData.project.userId !== userId) {
         throw new Error('无权修改此项目：仅创建者可编辑');
       }
 
@@ -237,7 +237,7 @@ export class ProjectStorage {
       try {
         const filePath = this.getFilePath(projectId);
         const projectData = await readJsonFile<ProjectData>(filePath);
-        if (projectData.project.userId && projectData.project.userId !== userId) {
+        if (userId && projectData.project.userId && projectData.project.userId !== userId) {
           throw new Error('无权删除此项目：仅创建者可删除');
         }
 

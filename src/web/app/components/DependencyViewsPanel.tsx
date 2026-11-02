@@ -806,7 +806,7 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
           onClick={() => onAddNext(task.id)}
         >
           <span className="text-sm leading-none">+</span>
-          <span>Next</span>
+          <span>下一步</span>
         </button>
         <button
           type="button"
@@ -1595,14 +1595,14 @@ export default function DependencyViewsPanel({
 
       {/* Sidebar */}
       <aside
-        className={`flex-shrink-0 p-4 flex flex-col overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/60 shadow-xl backdrop-blur-xl transition-all duration-300 ${
+        className={`hidden md:flex flex-shrink-0 p-4 flex-col overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/60 shadow-xl backdrop-blur-xl transition-all duration-300 ${
           isGraphListCollapsed ? 'w-20' : isCompact ? 'w-48' : 'w-56'
         }`}
       >
         <div className="flex items-center justify-between mb-4">
           {!isGraphListCollapsed && (
             <div className="min-w-0">
-              <h2 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">拓扑图 (Graphs)</h2>
+              <h2 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">知识图谱目录</h2>
               {projectName && (
                 <p className="text-xs text-zinc-300 font-semibold truncate mt-0.5">{projectName}</p>
               )}
@@ -1686,7 +1686,7 @@ export default function DependencyViewsPanel({
       </aside>
 
       {/* Main Canvas */}
-      <div ref={reactFlowWrapperRef} className={`relative flex-1 overflow-hidden bg-zinc-950/60 ${isCanvasFullscreen ? 'h-screen w-screen rounded-none border-0 shadow-none' : 'rounded-2xl border border-zinc-800/80 shadow-inner'}`}>
+      <div ref={reactFlowWrapperRef} className={`relative flex-1 h-full overflow-hidden bg-zinc-950/60 ${isCanvasFullscreen ? 'h-screen w-screen rounded-none border-0 shadow-none' : 'rounded-2xl border border-zinc-800/80 shadow-inner'}`}>
         {!selectedGraphId ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-zinc-500">
@@ -1706,7 +1706,28 @@ export default function DependencyViewsPanel({
         ) : (
           <>
             {/* Toolbar overlay */}
-             <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md p-1 rounded-xl border border-zinc-800 shadow-xl">
+             <div className="absolute top-3 left-3 z-10 flex flex-wrap items-center gap-1.5 sm:gap-2 bg-zinc-900/90 backdrop-blur-md p-1 sm:p-1.5 rounded-xl border border-zinc-800 shadow-xl max-w-[calc(100%-1.5rem)]">
+                {graphs.length > 0 && (
+                  <div className="md:hidden flex items-center">
+                    <select
+                      value={selectedGraphId || ''}
+                      onChange={(e) => setSelectedGraphId(e.target.value)}
+                      className="bg-zinc-950 text-amber-300 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none max-w-[110px] truncate"
+                    >
+                      {graphs.map(g => (
+                        <option key={g.id} value={g.id}>{g.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsCreateGraphOpen(true)}
+                  className="md:hidden flex items-center justify-center w-7 h-7 bg-amber-500/20 text-amber-300 rounded-lg border border-amber-500/40 text-xs font-black"
+                  title="新建图谱"
+                >
+                  <IconPlus className="w-3.5 h-3.5" />
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -1715,31 +1736,34 @@ export default function DependencyViewsPanel({
                     setHideCompletedInAdd(true);
                     setIsAddTaskOpen(true);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-750 text-amber-300 rounded-lg text-xs font-bold border border-amber-500/30 active:scale-95 transition-all shadow-sm"
+                  className="flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-zinc-800 hover:bg-zinc-750 text-amber-300 rounded-lg text-xs font-bold border border-amber-500/30 active:scale-95 transition-all shadow-sm"
                 >
                   <IconPlus className="w-3.5 h-3.5" />
-                  <span>添加模块</span>
+                  <span className="hidden sm:inline">添加模块</span>
+                  <span className="sm:hidden">加模块</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => void handleExportImage()}
                   disabled={isExportingImage || nodes.length === 0}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 rounded-lg text-xs font-bold border border-zinc-700 active:scale-95 transition-all disabled:cursor-not-allowed disabled:opacity-40"
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 rounded-lg text-xs font-bold border border-zinc-700 active:scale-95 transition-all disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  <span>导出 PNG</span>
+                  <span>导出图片</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => void handleToggleFullscreen()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 rounded-lg text-xs font-bold border border-zinc-700 active:scale-95 transition-all"
+                  className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 rounded-lg text-xs font-bold border border-zinc-700 active:scale-95 transition-all"
                   title={isCanvasFullscreen ? '退出全屏' : '全屏查看拓扑图'}
                 >
-                  <span>{isCanvasFullscreen ? '退出全屏' : '全屏展示'}</span>
+                  <span>{isCanvasFullscreen ? '退出' : '全屏'}</span>
                 </button>
                </div>
 
-             <div className={`absolute top-3 right-3 z-10 rounded-2xl border border-zinc-800 bg-zinc-900/95 p-3.5 shadow-2xl backdrop-blur-md text-zinc-100 ${isCompact ? 'w-64' : 'w-72'}`}>
-               <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">依赖连线动作 (Edge Actions)</p>
+             <div className={`absolute top-3 right-3 z-10 rounded-2xl border border-zinc-800 bg-zinc-900/95 p-3.5 shadow-2xl backdrop-blur-md text-zinc-100 ${
+               selectedEdge ? 'block w-72' : 'hidden md:block ' + (isCompact ? 'w-64' : 'w-72')
+             }`}>
+               <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">节点关联与连线</p>
                {selectedEdge && selectedEdgeLabel ? (
                  <>
                   <p className="mt-2 text-xs font-semibold text-zinc-200 leading-snug">
@@ -1809,8 +1833,8 @@ export default function DependencyViewsPanel({
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="text-center">
                   <div className="text-4xl mb-3">✨</div>
-                  <p className="text-sm font-semibold text-slate-500">No tasks in this graph yet</p>
-                  <p className="text-xs text-slate-400 mt-1">Click “Add Task” above to add nodes</p>
+                  <p className="text-sm font-semibold text-slate-500">当前图谱中暂无学习节点</p>
+                  <p className="text-xs text-slate-400 mt-1">点击上方「+ 添加模块」即可创建新节点</p>
                 </div>
               </div>
             )}

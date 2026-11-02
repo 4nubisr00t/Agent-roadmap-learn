@@ -1,11 +1,13 @@
 import express from 'express';
+import multer from 'multer';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'node:module';
 import fs, { existsSync } from 'node:fs';
 import type { Server } from 'http';
 import { storage } from '../storage/index.js';
-import { DependencyViewService, TaskService, TagService, authService, aiService, documentService } from '../services/index.js';
+import os from 'node:os';
+import { DependencyViewService, TaskService, TagService, authService, aiService, documentService, bookPipelineService, ragService } from '../services/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -186,6 +188,15 @@ export function createServer(port: number = 7860): Promise<Server> {
       }
     });
 
+    app.post('/api/ai/models', async (req, res) => {
+      try {
+        const result = await aiService.fetchModels(req.body);
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ success: false, error: (error as Error).message });
+      }
+    });
+
     app.post('/api/ai/chat', async (req, res) => {
       try {
         const upstreamRes = await aiService.streamChat(req.body);
@@ -226,6 +237,171 @@ export function createServer(port: number = 7860): Promise<Server> {
     });
 
     // ==========================================
+    // AI Enrich Task (Read Materials & Fill Card)
+    // ==========================================
+    app.post('/api/ai/enrich-task', async (req, res) => {
+      try {
+        const user = getAuthUser(req);
+        if (!user) {
+          res.status(401).json({ error: '请先登录账号以启用 AI 智能点亮与讲义生成' });
+          return;
+        }
+
+        const {
+          projectId,
+          taskId,
+          documentIds,
+          targetLevel,
+          focusPrompt,
+          provider,
+          baseUrl,
+          apiKey,
+          model,
+        } = req.body;
+
+        if (!projectId || !taskId) {
+          res.status(400).json({ error: '缺少 projectId 或 taskId' });
+          return;
+        }
+
+        const taskResult = await TaskService.get(projectId, taskId);
+        if (!taskResult.success || !taskResult.data) {
+          res.status(404).json({ error: (taskResult as any).error || '未找到目标学习节点' });
+          return;
+        }
+
+        const task = taskResult.data;
+
+        // Collect relevant materials using precise chapter-aware RAG
+        let materialSnippets = '';
+        const userDocs = await documentService.list(user.id);
+
+        if (Array.isArray(documentIds) && documentIds.length > 0) {
+          for (const docId of documentIds) {
+            const doc = await documentService.get(user.id, docId);
+            if (doc) {
+              const snippet = await ragService.getPreciseContext(doc, {
+                title: task.title,
+                description: task.description,
+                tags: task.tags,
+              });
+              materialSnippets += `\n\n${snippet}`;
+            }
+          }
+        } else if (userDocs.length > 0) {
+          // Prioritize documents belonging to current project
+          const projectDocs = userDocs.filter(d => d.projectId === projectId);
+          const candidateDocs = projectDocs.length > 0 ? projectDocs : userDocs;
+          for (const docSummary of candidateDocs.slice(0, 3)) {
+            const doc = await documentService.get(user.id, docSummary.id);
+            if (doc) {
+              const snippet = await ragService.getPreciseContext(doc, {
+                title: task.title,
+                description: task.description,
+                tags: task.tags,
+              });
+              materialSnippets += `\n\n${snippet}`;
+            }
+          }
+        }
+
+        // Get project info
+        const projectData = await storage.readProject(projectId);
+        const projectTopic = projectData?.project?.name || '专属学习技能树';
+
+        const richDescription = await aiService.enrichTaskNotes({
+          taskTitle: task.title,
+          taskDescription: task.description,
+          projectTopic,
+          materialSnippets: materialSnippets || '（未检索到直接上传的讲义文件，请结合标准知识库与权威技术原理深入阐述）',
+          targetLevel,
+          focusPrompt,
+          provider,
+          baseUrl,
+          apiKey,
+          model,
+        });
+
+        // Automatically update task in storage and set status to in-progress if currently todo
+        const newStatus = task.status === 'todo' ? 'in-progress' : task.status;
+        const updateRes = await TaskService.update(projectId, taskId, {
+          description: richDescription,
+          status: newStatus,
+        });
+
+        res.json({
+          success: true,
+          description: richDescription,
+          task: updateRes.success ? updateRes.data : { ...task, description: richDescription, status: newStatus },
+        });
+      } catch (err: any) {
+        console.error('enrich-task error:', err);
+        res.status(500).json({ error: err.message || 'AI 研读资料填充失败' });
+      }
+    });
+
+    // ==========================================
+    // AI Explain Highlight / Annotation
+    // ==========================================
+    app.post('/api/ai/explain-annotation', async (req, res) => {
+      try {
+        const {
+          selectedText,
+          comment,
+          taskTitle,
+          contextText,
+          intent,
+          projectId,
+          taskId,
+          provider,
+          baseUrl,
+          apiKey,
+          model,
+        } = req.body;
+
+        if (!selectedText) {
+          res.status(400).json({ error: '缺少划选文字' });
+          return;
+        }
+
+        let chapterContext = '';
+        const user = getAuthUser(req);
+        if (user && projectId) {
+          try {
+            const docs = await documentService.list(user.id, projectId);
+            if (docs.length > 0) {
+              const targetDoc = await documentService.get(user.id, docs[0].id);
+              if (targetDoc) {
+                chapterContext = await ragService.getPreciseContext(targetDoc, {
+                  title: taskTitle || '',
+                });
+              }
+            }
+          } catch {}
+        }
+
+        const reply = await aiService.explainAnnotation({
+          selectedText,
+          comment,
+          taskTitle: taskTitle || '当前课件',
+          contextText: chapterContext
+            ? `${contextText}\n\n【教材关联原文章节背景】：\n${chapterContext.slice(0, 3500)}`
+            : contextText,
+          intent,
+          provider,
+          baseUrl,
+          apiKey,
+          model,
+        });
+
+        res.json({ success: true, reply });
+      } catch (err: any) {
+        console.error('explain-annotation error:', err);
+        res.status(500).json({ error: err.message || 'AI 划词答疑失败' });
+      }
+    });
+
+    // ==========================================
     // User Document / Knowledge Base Routes
     // ==========================================
     app.get('/api/documents', async (req, res) => {
@@ -235,7 +411,8 @@ export function createServer(port: number = 7860): Promise<Server> {
           res.json({ success: true, data: [] });
           return;
         }
-        const docs = await documentService.list(user.id);
+        const projectId = req.query.projectId as string | undefined;
+        const docs = await documentService.list(user.id, projectId);
         res.json({ success: true, data: docs });
       } catch (error) {
         res.status(500).json({ error: (error as Error).message });
@@ -260,6 +437,136 @@ export function createServer(port: number = 7860): Promise<Server> {
       }
     });
 
+    const uploadHandler = multer({
+      storage: multer.memoryStorage(),
+      limits: {
+        fileSize: 100 * 1024 * 1024, // 100MB
+      },
+    });
+
+    app.post('/api/documents/upload', uploadHandler.single('file'), async (req, res) => {
+      try {
+        const user = getAuthUser(req);
+        if (!user) {
+          res.status(401).json({ error: '请先登录账号以上传个人专属资料' });
+          return;
+        }
+        const file = req.file;
+        if (!file) {
+          res.status(400).json({ error: '未接收到上传的文件内容' });
+          return;
+        }
+
+        // Recover proper UTF-8 filename if transmitted with latin1 encoding
+        let originalName = file.originalname;
+        try {
+          originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        } catch {}
+
+        const ext = (originalName.split('.').pop() || 'txt').toLowerCase();
+        const { projectId, projectName, title, tags } = req.body;
+        const finalTitle = title || originalName.replace(/\.[^/.]+$/, '');
+
+        let parsedTags: string[] = [];
+        if (tags) {
+          try {
+            parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags;
+          } catch {
+            parsedTags = [];
+          }
+        }
+
+        const doc = await documentService.create(user.id, {
+          projectId: projectId || undefined,
+          projectName: projectName || undefined,
+          title: finalTitle,
+          originalName,
+          fileType: ext,
+          buffer: file.buffer,
+          tags: parsedTags,
+        });
+
+        res.json({ success: true, data: doc });
+      } catch (error) {
+        console.error('Document upload error:', error);
+        res.status(400).json({ error: (error as Error).message });
+      }
+    });
+
+    // Multi-channel Concurrent Chunk Upload Endpoint
+    app.post('/api/documents/upload-chunk', uploadHandler.single('chunk'), async (req, res) => {
+      try {
+        const user = getAuthUser(req);
+        if (!user) {
+          res.status(401).json({ error: '请先登录账号后上传资料' });
+          return;
+        }
+
+        const chunkFile = req.file;
+        if (!chunkFile) {
+          res.status(400).json({ error: '分片二进制数据缺失' });
+          return;
+        }
+
+        const uploadId = req.body.uploadId;
+        const chunkIndex = parseInt(req.body.chunkIndex, 10);
+        const totalChunks = parseInt(req.body.totalChunks, 10);
+
+        if (!uploadId || isNaN(chunkIndex) || isNaN(totalChunks)) {
+          res.status(400).json({ error: '分片元参数无效' });
+          return;
+        }
+
+        const result = await documentService.saveChunk(uploadId, chunkIndex, totalChunks, chunkFile.buffer);
+        res.json({ success: true, ...result });
+      } catch (error) {
+        console.error('Chunk upload error:', error);
+        res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
+    // Merge Chunks and Finalize Document
+    app.post('/api/documents/merge-chunks', async (req, res) => {
+      try {
+        const user = getAuthUser(req);
+        if (!user) {
+          res.status(401).json({ error: '请先登录账号后操作资料' });
+          return;
+        }
+
+        const { uploadId, totalChunks, originalName, fileType, title, projectId, projectName, tags } = req.body;
+        if (!uploadId || !totalChunks || !originalName) {
+          res.status(400).json({ error: '缺少必要的合并参数' });
+          return;
+        }
+
+        let parsedTags: string[] = [];
+        if (tags) {
+          try {
+            parsedTags = Array.isArray(tags) ? tags : JSON.parse(tags);
+          } catch {
+            parsedTags = [];
+          }
+        }
+
+        const doc = await documentService.mergeChunks(user.id, {
+          uploadId,
+          totalChunks: parseInt(totalChunks, 10),
+          originalName,
+          fileType: fileType || 'pdf',
+          title,
+          projectId: projectId || undefined,
+          projectName: projectName || undefined,
+          tags: parsedTags,
+        });
+
+        res.json({ success: true, data: doc });
+      } catch (error) {
+        console.error('Merge chunks error:', error);
+        res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
     app.post('/api/documents', async (req, res) => {
       try {
         const user = getAuthUser(req);
@@ -267,8 +574,10 @@ export function createServer(port: number = 7860): Promise<Server> {
           res.status(401).json({ error: '请先登录账号以上传个人专属资料' });
           return;
         }
-        const { title, originalName, fileType, content, base64, tags } = req.body;
+        const { title, originalName, fileType, content, base64, tags, projectId, projectName } = req.body;
         const doc = await documentService.create(user.id, {
+          projectId,
+          projectName,
           title,
           originalName,
           fileType,
@@ -279,6 +588,30 @@ export function createServer(port: number = 7860): Promise<Server> {
         res.json({ success: true, data: doc });
       } catch (error) {
         res.status(400).json({ error: (error as Error).message });
+      }
+    });
+
+    app.put('/api/documents/:id', async (req, res) => {
+      try {
+        const user = getAuthUser(req);
+        if (!user) {
+          res.status(401).json({ error: '未登录' });
+          return;
+        }
+        const { projectId, projectName, title, tags } = req.body;
+        const doc = await documentService.update(user.id, req.params.id, {
+          projectId,
+          projectName,
+          title,
+          tags,
+        });
+        if (!doc) {
+          res.status(404).json({ error: '资料未找到或无权修改' });
+          return;
+        }
+        res.json({ success: true, data: doc });
+      } catch (error) {
+        res.status(500).json({ error: (error as Error).message });
       }
     });
 
@@ -296,15 +629,35 @@ export function createServer(port: number = 7860): Promise<Server> {
       }
     });
 
-    // ==========================================
-    // AI Skill Tree Generator from Materials
+        // ==========================================
+    // AI Skill Tree Generator from Materials (with Deep Book Pipeline)
     // ==========================================
     app.post('/api/ai/generate-roadmap', async (req, res) => {
+      const isStream = req.body?.stream === true;
+
+      const sendProgress = (step: number, totalSteps: number, message: string, percent: number) => {
+        if (isStream) {
+          res.write(`data: ${JSON.stringify({ type: 'progress', step, totalSteps, message, percent })}\n\n`);
+          if ((res as any).flush) (res as any).flush();
+        }
+      };
+
       try {
         const user = getAuthUser(req);
         if (!user) {
-          res.status(401).json({ error: '请先登录账号以生成您的专属技能树' });
+          if (isStream) {
+            res.write(`data: ${JSON.stringify({ type: 'error', error: '请先登录账号以生成您的专属技能树' })}\n\n`);
+            res.end();
+          } else {
+            res.status(401).json({ error: '请先登录账号以生成您的专属技能树' });
+          }
           return;
+        }
+
+        if (isStream) {
+          res.setHeader('Content-Type', 'text/event-stream');
+          res.setHeader('Cache-Control', 'no-cache');
+          res.setHeader('Connection', 'keep-alive');
         }
 
         const {
@@ -318,40 +671,100 @@ export function createServer(port: number = 7860): Promise<Server> {
           model,
         } = req.body;
 
-        let combinedMaterial = rawMaterialText || '';
+        sendProgress(1, 4, '准备解析教材与参考资料...', 10);
 
+        let plan: any = null;
+
+        // Try Deep Book Pipeline if an uploaded document is selected
         if (Array.isArray(documentIds) && documentIds.length > 0) {
-          for (const docId of documentIds) {
-            const doc = await documentService.get(user.id, docId);
-            if (doc && doc.content) {
-              combinedMaterial += `\n\n【教材/资料：《${doc.title}》】\n${doc.content.slice(0, 10000)}`;
+          const doc = await documentService.get(user.id, documentIds[0]);
+          if (doc) {
+            let bookFilePath = doc.filePath;
+            if (!bookFilePath || !fs.existsSync(bookFilePath)) {
+              // Create temporary file from doc content if raw file missing
+              const tempDir = path.join(os.tmpdir(), 'book_pipeline');
+              if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+              bookFilePath = path.join(tempDir, `${doc.id}.txt`);
+              fs.writeFileSync(bookFilePath, doc.content, 'utf-8');
+            }
+
+            try {
+              sendProgress(1, 4, `启动沙箱解析《${doc.title}》目录树与知识章节...`, 15);
+              const parsedBook = await bookPipelineService.parseBookFile(bookFilePath);
+              if (parsedBook && parsedBook.chapter_count > 1) {
+                plan = await bookPipelineService.generateDeepSkillTree({
+                  bookData: parsedBook,
+                  topicName: topicName || doc.title,
+                  targetLevel,
+                  provider,
+                  baseUrl,
+                  apiKey,
+                  model,
+                  onProgress: (p) => sendProgress(p.step, p.totalSteps, p.message, p.percent),
+                });
+              }
+            } catch (err: any) {
+              console.warn('Deep book pipeline fallback to standard:', err.message);
             }
           }
         }
 
-        if (!combinedMaterial.trim()) {
-          res.status(400).json({ error: '未提供任何教材文本或未选中有效资料' });
-          return;
+        // Fallback to standard generation if deep pipeline not applicable
+        if (!plan) {
+          sendProgress(2, 4, '正在梳理教材资料并规划专属技能树...', 45);
+          let combinedMaterial = rawMaterialText || '';
+
+          if (Array.isArray(documentIds) && documentIds.length > 0) {
+            for (const docId of documentIds) {
+              const doc = await documentService.get(user.id, docId);
+              if (doc && doc.content) {
+                combinedMaterial += `\n\n【教材/资料：《${doc.title}》】\n${doc.content.slice(0, 15000)}`;
+              }
+            }
+          }
+
+          if (!combinedMaterial.trim()) {
+            throw new Error('未提供任何教材文本或未选中有效资料');
+          }
+
+          plan = await aiService.generateSkillTreePlan({
+            materialText: combinedMaterial,
+            topicName: topicName || '专属学习技能树',
+            targetLevel: targetLevel || '初学者至实战专家',
+            provider,
+            baseUrl,
+            apiKey,
+            model,
+          });
         }
 
-        const plan = await aiService.generateSkillTreePlan({
-          materialText: combinedMaterial,
-          topicName: topicName || '专属学习技能树',
-          targetLevel: targetLevel || '初学者至实战专家',
-          provider,
-          baseUrl,
-          apiKey,
-          model,
-        });
+        sendProgress(4, 4, '正在存储并编排可视化拓扑视图...', 95);
 
-        const projectId = `proj_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        let existingProject: any = null;
+        let targetProjId = req.body.projectId;
+        if (!targetProjId && Array.isArray(documentIds) && documentIds.length > 0) {
+          const firstDoc = await documentService.get(user.id, documentIds[0]);
+          if (firstDoc?.projectId) {
+            targetProjId = firstDoc.projectId;
+          }
+        }
+        if (targetProjId) {
+          try {
+            const loaded = await storage.readProject(targetProjId);
+            if (loaded && (!loaded.project.userId || loaded.project.userId === user.id)) {
+              existingProject = loaded;
+            }
+          } catch {}
+        }
+
+        const projectId = existingProject ? existingProject.project.id : `proj_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
         const now = new Date().toISOString();
 
-        const milestones = (plan.milestones || []).map((m, idx) => ({
+        const milestones = (plan.milestones || []).map((m: any, idx: number) => ({
           id: `ms_${Date.now()}_${idx}`,
           title: m.title,
           description: '',
-          targetDate: undefined,
+          targetDate: '',
           status: 'planned' as const,
           order: idx + 1,
           createdAt: now,
@@ -359,51 +772,67 @@ export function createServer(port: number = 7860): Promise<Server> {
         }));
 
         const milestoneIdMap: Record<string, string> = {};
-        (plan.milestones || []).forEach((m, idx) => {
+        (plan.milestones || []).forEach((m: any, idx: number) => {
           milestoneIdMap[m.id] = milestones[idx].id;
         });
 
         const taskIdMap: Record<string, string> = {};
-        const tasks = (plan.tasks || []).map((t, idx) => {
+        const tasks = (plan.tasks || []).map((t: any, idx: number) => {
           const newTaskId = `task_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
           taskIdMap[t.id] = newTaskId;
           return {
             id: newTaskId,
+            projectId,
             title: t.title,
             description: t.description || '',
             status: idx === 0 ? ('in-progress' as const) : ('todo' as const),
             priority: t.priority || 'medium',
-            milestoneId: milestoneIdMap[t.milestoneId] || milestones[0]?.id,
+            milestoneId: milestoneIdMap[t.milestoneId] || milestones[0]?.id || null,
+            assignedTo: null,
+            estimatedHours: null,
+            actualHours: null,
+            startDate: null,
+            dueDate: null,
+            completedAt: null,
             tags: t.tags || [],
+            metadata: {},
             createdAt: now,
             updatedAt: now,
           };
         });
 
-        const graphId = `graph_${Date.now()}`;
-        const nodes = tasks.map((t, idx) => ({
-          id: `node_${t.id}`,
+        const graphId = existingProject?.dependencyViews?.[0]?.id || `view_${Date.now()}`;
+        const nodes = tasks.map((t: any, idx: number) => ({
           taskId: t.id,
-          position: { x: 260 * (idx % 3), y: 160 * Math.floor(idx / 3) },
-          status: t.status,
+          x: 60 + 280 * (idx % 3),
+          y: 120 + 180 * Math.floor(idx / 3),
+          collapsed: false,
+          note: t.title,
         }));
 
-        const edges = (plan.dependencies || []).map((dep, idx) => {
-          const s = taskIdMap[dep.source] || dep.source;
-          const t = taskIdMap[dep.target] || dep.target;
-          return {
-            id: `edge_${Date.now()}_${idx}`,
-            source: s,
-            target: t,
-            type: (dep.type as any) || 'prerequisite',
-          };
-        });
+        const validTaskIds = new Set(tasks.map((t: any) => t.id));
+        const edges = (plan.dependencies || [])
+          .map((dep: any, idx: number) => {
+            const s = taskIdMap[dep.source] || dep.source;
+            const t = taskIdMap[dep.target] || dep.target;
+            return {
+              id: `edge_${Date.now()}_${idx}`,
+              fromTaskId: s,
+              toTaskId: t,
+              kind: 'hard' as const,
+              createdAt: now,
+            };
+          })
+          .filter((e: any) => validTaskIds.has(e.fromTaskId) && validTaskIds.has(e.toTaskId) && e.fromTaskId !== e.toTaskId);
+
+        const finalProjectName = existingProject ? existingProject.project.name : (plan.name || topicName);
 
         const dependencyView = {
           id: graphId,
-          name: '核心学习拓扑',
-          description: `基于《${topicName}》资料由 AI 自动构建的认知进阶路径`,
-          dimension: 'technical' as const,
+          projectId,
+          name: '🌟 技能拓扑树',
+          description: `基于《${finalProjectName}》由沙箱与大模型深度解构构建的认知进阶路径`,
+          dimension: null,
           revision: 1,
           nodes,
           edges,
@@ -412,26 +841,51 @@ export function createServer(port: number = 7860): Promise<Server> {
         };
 
         const projectData = {
+          version: 1,
           project: {
             id: projectId,
-            name: plan.name || topicName,
-            description: plan.description || '根据上传资料自动提炼生成的专属技能树',
+            name: finalProjectName,
+            description: plan.description || existingProject?.project?.description || '根据教材自动提炼生成的专属技能树',
             projectType: 'skill-tree' as const,
             status: 'active' as const,
+            startDate: existingProject?.project?.startDate || now,
+            targetDate: existingProject?.project?.targetDate || '',
             userId: user.id, // Strictly isolated per user!
-            createdAt: now,
+            createdAt: existingProject?.project?.createdAt || now,
             updatedAt: now,
           },
           milestones,
           tasks,
-          tags: [],
+          tags: existingProject?.tags || [],
           dependencyViews: [dependencyView],
         };
 
         await storage.saveFullProject(projectData);
-        res.json({ success: true, data: projectData });
+
+        // Auto-bind source document(s) to this project
+        if (Array.isArray(documentIds)) {
+          for (const docId of documentIds) {
+            await documentService.update(user.id, docId, {
+              projectId,
+              projectName: finalProjectName,
+            }).catch(() => {});
+          }
+        }
+
+        if (isStream) {
+          res.write(`data: ${JSON.stringify({ type: 'done', data: projectData })}\n\n`);
+          res.end();
+        } else {
+          res.json({ success: true, data: projectData });
+        }
       } catch (err: any) {
-        res.status(500).json({ error: err.message || '生成技能树失败' });
+        console.error('generate-roadmap error:', err);
+        if (isStream) {
+          res.write(`data: ${JSON.stringify({ type: 'error', error: err.message || '生成技能树失败' })}\n\n`);
+          res.end();
+        } else {
+          res.status(500).json({ error: err.message || '生成技能树失败' });
+        }
       }
     });
 
@@ -741,9 +1195,9 @@ export function createServer(port: number = 7860): Promise<Server> {
     app.post('/api/annotations', (req, res) => {
       try {
         const user = getAuthUser(req);
-        const { taskId, taskTitle, selectedText, comment } = req.body;
-        if (!selectedText || !comment) {
-          res.status(400).json({ error: 'selectedText and comment are required' });
+        const { taskId, taskTitle, selectedText, comment, aiResponse, aiStatus } = req.body;
+        if (!selectedText) {
+          res.status(400).json({ error: 'selectedText is required' });
           return;
         }
         const list = loadAnnotations();
@@ -753,13 +1207,41 @@ export function createServer(port: number = 7860): Promise<Server> {
           taskId: taskId || '',
           taskTitle: taskTitle || '',
           selectedText: selectedText.trim(),
-          comment: comment.trim(),
+          comment: (comment || '').trim(),
+          aiResponse: aiResponse || undefined,
+          aiStatus: aiStatus || (aiResponse ? 'answered' : 'idle'),
           createdAt: new Date().toLocaleString('zh-CN'),
           status: 'pending'
         };
         list.unshift(newAnnotation);
         syncAnnotationsToFile(list);
         res.json({ success: true, data: newAnnotation });
+      } catch (error) {
+        res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
+    app.put('/api/annotations/:id', (req, res) => {
+      try {
+        const user = getAuthUser(req);
+        const { id } = req.params;
+        const { comment, aiResponse, aiStatus } = req.body;
+        let list = loadAnnotations();
+        const index = list.findIndex((it: any) => it.id === id);
+        if (index === -1) {
+          res.status(404).json({ error: '批注未找到' });
+          return;
+        }
+        if (list[index].userId && list[index].userId !== user?.id) {
+          res.status(403).json({ error: '无权修改其他用户的批注' });
+          return;
+        }
+        if (comment !== undefined) list[index].comment = comment;
+        if (aiResponse !== undefined) list[index].aiResponse = aiResponse;
+        if (aiStatus !== undefined) list[index].aiStatus = aiStatus;
+        list[index].updatedAt = new Date().toLocaleString('zh-CN');
+        syncAnnotationsToFile(list);
+        res.json({ success: true, data: list[index] });
       } catch (error) {
         res.status(500).json({ error: (error as Error).message });
       }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { marked } from 'marked';
+import { renderMarkdown, triggerMermaidRender } from './utils/markdown.js';
 import { getItem, setItem, STORAGE_KEYS } from './utils/storage.js';
 import TagBadge from './components/TagBadge.js';
 import TagFilter from './components/TagFilter.js';
@@ -12,6 +12,7 @@ import { DocumentManagerModal } from './components/modals/DocumentManagerModal.j
 import { AIRoadmapGeneratorModal } from './components/modals/AIRoadmapGeneratorModal.js';
 import { TaskAIChat } from './components/TaskAIChat.js';
 import {
+  IconAI,
   IconLightning,
   IconTree,
   IconKanban,
@@ -36,6 +37,7 @@ import {
   IconLayers,
   IconRefresh,
   IconClock,
+  IconMenu,
 } from './components/Icons.js';
 
 interface Project {
@@ -131,10 +133,13 @@ const KANBAN_COLUMNS: TaskStatus[] = ['todo', 'in-progress', 'review', 'done'];
 
 export interface AnnotationItem {
   id: string;
+  userId?: string;
   taskId: string;
   taskTitle: string;
   selectedText: string;
   comment: string;
+  aiResponse?: string;
+  aiStatus?: 'idle' | 'generating' | 'answered' | 'error';
   createdAt: string;
   status?: string;
 }
@@ -161,9 +166,31 @@ const App: React.FC = () => {
   const [selectedHighlight, setSelectedHighlight] = useState<{ text: string; x: number; y: number } | null>(null);
   const [isAnnotationModalOpen, setIsAnnotationModalOpen] = useState(false);
   const [annotationComment, setAnnotationComment] = useState('');
+  const [annotationIntent, setAnnotationIntent] = useState<'explain' | 'example' | 'doubt' | 'quiz'>('explain');
+  const [isAnsweringAnnotation, setIsAnsweringAnnotation] = useState(false);
+  const [isEnrichingTask, setIsEnrichingTask] = useState(false);
+  const [enrichStatusText, setEnrichStatusText] = useState('');
   const [draggedTask, setDraggedTask] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [mobileKanbanTab, setMobileKanbanTab] = useState<TaskStatus>('in-progress');
+  const [activeBuildingJob, setActiveBuildingJob] = useState<{
+    topicName: string;
+    step: string;
+    percent: number;
+    error?: string;
+    isDone?: boolean;
+    projectData?: any;
+  } | null>(null);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
+
+  useEffect(() => {
+    if (isEditModalOpen && (modalActiveTab === 'courseware' || modalActiveTab === 'annotations')) {
+      setTimeout(() => {
+        triggerMermaidRender();
+      }, 100);
+    }
+  }, [isEditModalOpen, modalActiveTab, editingTask?.description]);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [taskFormError, setTaskFormError] = useState('');
   const [newTaskForm, setNewTaskForm] = useState({
@@ -290,12 +317,18 @@ const App: React.FC = () => {
           const user = data?.data || data?.user;
           if (user) {
             setCurrentUser(user);
+          } else {
+            setIsAuthModalOpen(true);
           }
         })
         .catch(() => {
           localStorage.removeItem('roadmap_auth_token');
           setCurrentUser(null);
+          setIsAuthModalOpen(true);
         });
+    } else {
+      // First visit or not logged in: pop up login/register modal immediately
+      setIsAuthModalOpen(true);
     }
   }, []);
 
@@ -519,7 +552,7 @@ const App: React.FC = () => {
       });
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload.error || 'Failed to add task to graph');
+        throw new Error(payload.error || '添加节点至图谱失败');
       }
 
       setGraphPickerTaskId(null);
@@ -606,32 +639,202 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSaveAnnotation = async () => {
-    if (!selectedHighlight || !annotationComment.trim() || !editingTask) return;
+  // AI Read Materials & Enrich Task
+  const handleEnrichTaskWithAI = async () => {
+    if (!editingTask || !selectedProject) return;
+
+    let aiConfig: any = null;
     try {
-      const res = await fetch('/api/annotations', {
+      const saved = localStorage.getItem('roadmap_ai_config');
+      if (saved) aiConfig = JSON.parse(saved);
+    } catch {}
+
+    setIsEnrichingTask(true);
+    setEnrichStatusText('AI 正在研读私有资料库教材与核心大纲...');
+
+    try {
+      const res = await fetch('/api/ai/enrich-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: selectedProject,
+          taskId: editingTask.id,
+          provider: aiConfig?.buildEngine?.providerId || aiConfig?.providerId,
+          baseUrl: aiConfig?.buildEngine?.baseUrl || aiConfig?.baseUrl,
+          apiKey: aiConfig?.buildEngine?.apiKey || aiConfig?.apiKey,
+          model: aiConfig?.buildEngine?.model || aiConfig?.model,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'AI 研读资料填充失败');
+      }
+
+      const updatedTask = data.task || { ...editingTask, description: data.description, status: 'in-progress' };
+      setEditingTask(updatedTask);
+      setTasks(prev => prev.map(item => item.task.id === updatedTask.id ? { ...item, task: updatedTask } : item));
+      setModalActiveTab('courseware');
+    } catch (err: any) {
+      alert(err.message || 'AI 填充失败，请检查网络或配置');
+    } finally {
+      setIsEnrichingTask(false);
+      setEnrichStatusText('');
+    }
+  };
+
+  // Immediate Reactive AI Annotation Handler
+  const handleSaveAnnotation = async (customComment?: string, customIntent?: 'explain' | 'example' | 'doubt' | 'quiz') => {
+    if (!selectedHighlight || !editingTask) return;
+    const finalComment = (customComment !== undefined ? customComment : annotationComment).trim();
+    const finalIntent = customIntent || annotationIntent;
+    const highlightText = selectedHighlight.text;
+
+    let aiConfig: any = null;
+    try {
+      const saved = localStorage.getItem('roadmap_ai_config');
+      if (saved) aiConfig = JSON.parse(saved);
+    } catch {}
+
+    setIsAnsweringAnnotation(true);
+    setIsAnnotationModalOpen(false);
+    setSelectedHighlight(null);
+    setModalActiveTab('annotations');
+
+    // Create temporary optimistic annotation
+    const tempId = 'ann_' + Date.now();
+    const optimisticAnn: AnnotationItem = {
+      id: tempId,
+      taskId: editingTask.id,
+      taskTitle: editingTask.title,
+      selectedText: highlightText,
+      comment: finalComment || (finalIntent === 'example' ? '请提供实战代码案例' : '请深入剖析核心含义与原理'),
+      aiStatus: 'generating',
+      createdAt: new Date().toLocaleTimeString('zh-CN'),
+    };
+    setAnnotations(prev => [optimisticAnn, ...prev]);
+
+    try {
+      // 1. Immediately request AI explanation
+      const explainRes = await fetch('/api/ai/explain-annotation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedText: highlightText,
+          comment: finalComment,
+          taskTitle: editingTask.title,
+          contextText: editingTask.description?.slice(0, 1500) || '',
+          intent: finalIntent,
+          projectId: selectedProject,
+          taskId: editingTask.id,
+          provider: aiConfig?.mentorEngine?.providerId || aiConfig?.providerId,
+          baseUrl: aiConfig?.mentorEngine?.baseUrl || aiConfig?.baseUrl,
+          apiKey: aiConfig?.mentorEngine?.apiKey || aiConfig?.apiKey,
+          model: aiConfig?.mentorEngine?.model || aiConfig?.model,
+        }),
+      });
+
+      const explainData = await explainRes.json();
+      const aiReply = explainData.reply || (explainRes.ok ? 'AI 导师已解析' : 'AI 响应超时，请重试');
+
+      // 2. Persist annotation with AI reply to server
+      const saveRes = await fetch('/api/annotations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           taskId: editingTask.id,
           taskTitle: editingTask.title,
-          selectedText: selectedHighlight.text,
-          comment: annotationComment.trim(),
+          selectedText: highlightText,
+          comment: finalComment || (finalIntent === 'example' ? '请提供实战代码案例' : '请深入剖析核心含义与原理'),
+          aiResponse: aiReply,
+          aiStatus: 'answered',
+        }),
+      });
+
+      if (saveRes.ok) {
+        const savedData = await saveRes.json();
+        if (savedData.success) {
+          setAnnotations(prev => prev.map(a => a.id === tempId ? savedData.data : a));
+        }
+      } else {
+        setAnnotations(prev => prev.map(a => a.id === tempId ? { ...a, aiResponse: aiReply, aiStatus: 'answered' } : a));
+      }
+    } catch (err: any) {
+      console.error('Failed to get AI annotation reply:', err);
+      setAnnotations(prev => prev.map(a => a.id === tempId ? { ...a, aiStatus: 'error', aiResponse: '获取解答失败：' + (err.message || '网络异常') } : a));
+    } finally {
+      setIsAnsweringAnnotation(false);
+      setAnnotationComment('');
+      window.getSelection()?.removeAllRanges();
+    }
+  };
+
+  // Re-run AI explanation for an existing annotation
+  const handleExplainExistingAnnotation = async (ann: AnnotationItem) => {
+    if (!editingTask) return;
+    let aiConfig: any = null;
+    try {
+      const saved = localStorage.getItem('roadmap_ai_config');
+      if (saved) aiConfig = JSON.parse(saved);
+    } catch {}
+
+    setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, aiStatus: 'generating' } : a));
+
+    try {
+      const res = await fetch('/api/ai/explain-annotation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedText: ann.selectedText,
+          comment: ann.comment,
+          taskTitle: editingTask.title,
+          contextText: editingTask.description?.slice(0, 1500) || '',
+          projectId: selectedProject,
+          taskId: editingTask.id,
+          provider: aiConfig?.mentorEngine?.providerId || aiConfig?.providerId,
+          baseUrl: aiConfig?.mentorEngine?.baseUrl || aiConfig?.baseUrl,
+          apiKey: aiConfig?.mentorEngine?.apiKey || aiConfig?.apiKey,
+          model: aiConfig?.mentorEngine?.model || aiConfig?.model,
+        }),
+      });
+      const data = await res.json();
+      const reply = data.reply || 'AI 未返回内容';
+
+      await fetch(`/api/annotations/${ann.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aiResponse: reply, aiStatus: 'answered' }),
+      });
+
+      setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, aiResponse: reply, aiStatus: 'answered' } : a));
+    } catch (err: any) {
+      setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, aiStatus: 'error' } : a));
+    }
+  };
+
+  // Append AI annotation explanation directly into task notes
+  const handleAppendAnnotationToNotes = async (ann: AnnotationItem) => {
+    if (!editingTask || !selectedProject || !ann.aiResponse) return;
+    const appendBlock = `\n\n---\n### 💡 重点批注与导师解答\n> **📌 划词原文**：${ann.selectedText}\n> **💬 学员提问**：${ann.comment}\n\n${ann.aiResponse}\n`;
+    const newDescription = (editingTask.description || '') + appendBlock;
+
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: selectedProject,
+          taskId: editingTask.id,
+          description: newDescription,
         }),
       });
       if (res.ok) {
-        const result = await res.json();
-        if (result.success) {
-          setAnnotations(prev => [result.data, ...prev]);
-          setIsAnnotationModalOpen(false);
-          setSelectedHighlight(null);
-          setAnnotationComment('');
-          window.getSelection()?.removeAllRanges();
-          setModalActiveTab('annotations');
-        }
+        setEditingTask(prev => prev ? { ...prev, description: newDescription } : prev);
+        setTasks(prev => prev.map(item => item.task.id === editingTask.id ? { ...item, task: { ...item.task, description: newDescription } } : item));
+        alert('已成功将导师解答写入本模块讲义笔记！');
       }
-    } catch (err) {
-      console.error('Failed to save annotation:', err);
+    } catch (e) {
+      alert('写入笔记失败，请重试');
     }
   };
 
@@ -922,17 +1125,17 @@ const App: React.FC = () => {
       return;
     }
     if (title.length < 3) {
-      setTaskFormError('Title must be at least 3 characters.');
+      setTaskFormError('模块标题至少需要 3 个字');
       return;
     }
     if (title.length > 120) {
-      setTaskFormError('Title must be 120 characters or fewer.');
+      setTaskFormError('模块标题不能超过 120 个字');
       return;
     }
 
     const targetProjectId = selectedProject;
     if (!targetProjectId) {
-      setTaskFormError('Please select a project from the left sidebar before adding a task.');
+      setTaskFormError('请先在左侧选择一个学习路线');
       return;
     }
 
@@ -951,7 +1154,7 @@ const App: React.FC = () => {
       setIsCreateTaskModalOpen(false);
     } catch (error) {
       console.error('Failed to create task:', error);
-      setTaskFormError('Failed to create task. Please try again.');
+      setTaskFormError('创建模块失败，请稍后重试');
     }
   };
 
@@ -1050,9 +1253,10 @@ const App: React.FC = () => {
       <div
         key={task.id}
         draggable
+        onClick={() => handleEditTask(task)}
         onDragStart={(e) => handleDragStart(e, task.id)}
         onDragEnd={() => setDraggedTask(null)}
-        className={`bg-zinc-900/90 rounded-2xl border border-zinc-800/80 cursor-move transition-all duration-200 ease-out group flex flex-col hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/5 ${
+        className={`bg-zinc-900/90 rounded-2xl border border-zinc-800/80 cursor-pointer transition-all duration-200 ease-out group flex flex-col hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/5 ${
           isDragging
             ? 'shadow-2xl scale-105 border-amber-400 rotate-1 z-10'
             : 'shadow-sm hover:-translate-y-0.5'
@@ -1073,13 +1277,13 @@ const App: React.FC = () => {
                     setGraphPickerTaskId((current) => current === task.id ? null : task.id);
                   }}
                   className={`text-zinc-400 hover:text-amber-300 hover:bg-zinc-800 rounded-lg transition-all font-black active:scale-95 ${cardMode === 'compact' ? 'px-2 py-1 text-[10px]' : 'px-2.5 py-1 text-[11px]'}`}
-                  title="Add to Graph"
+                  title="添加至知识图谱"
                 >
-                  Graph
+                  图谱
                 </button>
                 {graphPickerTaskId === task.id && (
                   <div className="absolute right-0 top-8 z-20 w-52 rounded-xl border border-zinc-700 bg-zinc-900 p-2 shadow-2xl">
-                    <div className="px-2 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Add To Graph</div>
+                    <div className="px-2 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">添加至知识图谱</div>
                     <div className="mt-1 space-y-1">
                       {graphViews.map((graph) => (
                         <button
@@ -1105,7 +1309,7 @@ const App: React.FC = () => {
                 handleEditTask(task);
               }}
               className={`text-zinc-400 hover:text-amber-300 hover:bg-zinc-800 rounded-lg transition-all active:scale-95 ${cardMode === 'compact' ? 'p-1' : 'p-1.5'}`}
-              title="Edit Task"
+              title="编辑模块"
             >
               <IconEdit className={cardMode === 'compact' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
             </button>
@@ -1115,7 +1319,7 @@ const App: React.FC = () => {
                 handleDeleteTask(task.id, project.id);
               }}
               className={`text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 rounded-lg transition-all active:scale-95 ${cardMode === 'compact' ? 'p-1' : 'p-1.5'}`}
-              title="Delete Task"
+              title="删除模块"
             >
               <IconTrash className={cardMode === 'compact' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
             </button>
@@ -1170,20 +1374,360 @@ const App: React.FC = () => {
   const progressPercent = totalTasksCount > 0 ? Math.round((doneTasksCount / totalTasksCount) * 100) : 0;
 
   return (
-    <div className="min-h-screen bg-transparent p-4 sm:p-6 text-zinc-100">
-      <header className="mb-6 flex flex-wrap justify-between items-center gap-4 bg-zinc-900/80 backdrop-blur-xl p-4 rounded-2xl border border-zinc-800 shadow-2xl">
+    <div className="min-h-screen bg-transparent p-2 sm:p-6 text-zinc-100">
+      {/* Mobile Top Header (< md) */}
+      <header className="md:hidden mb-4 bg-zinc-900/90 backdrop-blur-xl p-3 rounded-2xl border border-zinc-800 shadow-xl flex flex-col gap-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsMobileDrawerOpen(true)}
+              className="w-9 h-9 rounded-xl bg-zinc-800 border border-zinc-700 text-amber-400 flex items-center justify-center active:scale-90 transition-all shadow-sm"
+              title="打开控制面板"
+            >
+              <IconMenu className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-zinc-950 font-black shadow-md shadow-amber-500/20">
+                <IconLightning className="w-4 h-4 text-zinc-950" />
+              </div>
+              <span className="text-base font-black text-zinc-100 tracking-tight">
+                智学<span className="text-amber-400">工坊</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* View Mode Switch */}
+            <div className="flex bg-zinc-950 border border-zinc-800 rounded-xl p-0.5 shadow-inner">
+              <button
+                type="button"
+                onClick={() => setWorkspaceMode('dependency')}
+                disabled={!selectedProject}
+                className={`p-1.5 rounded-lg transition-all ${
+                  workspaceMode === 'dependency'
+                    ? 'bg-amber-400 text-zinc-950 font-black shadow-sm'
+                    : 'text-zinc-400'
+                } disabled:opacity-30`}
+                title="知识拓扑图"
+              >
+                <IconTree className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setWorkspaceMode('kanban')}
+                className={`p-1.5 rounded-lg transition-all ${
+                  workspaceMode === 'kanban'
+                    ? 'bg-amber-400 text-zinc-950 font-black shadow-sm'
+                    : 'text-zinc-400'
+                }`}
+                title="阶段看板"
+              >
+                <IconKanban className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick User Avatar / Login */}
+            {currentUser ? (
+              <button
+                type="button"
+                onClick={() => setIsMobileDrawerOpen(true)}
+                className="w-8 h-8 rounded-xl bg-zinc-850 border border-amber-500/30 text-amber-300 font-black text-xs flex items-center justify-center shadow-sm"
+                title={currentUser.username}
+              >
+                {currentUser.username.slice(0, 1).toUpperCase()}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsAuthModalOpen(true)}
+                className="px-2.5 py-1 bg-amber-500 text-zinc-950 text-xs font-black rounded-xl active:scale-95 shadow-sm"
+              >
+                登录
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Mobile Subbar: Current Project Pill & Progress */}
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-800/80 text-xs">
+          <button
+            type="button"
+            onClick={() => setIsMobileDrawerOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-950 border border-amber-500/30 text-amber-300 font-bold max-w-[210px] truncate active:scale-95 transition-all shadow-inner"
+          >
+            <span>🎯</span>
+            <span className="truncate">
+              {projects.find(p => p.project.id === selectedProject)?.project.name || '全部技能树'}
+            </span>
+            <span className="text-[10px] text-zinc-500">▾</span>
+          </button>
+
+          {totalTasksCount > 0 && (
+            <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 font-medium">
+              <span>{doneTasksCount}/{totalTasksCount}</span>
+              <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden p-0.2">
+                <div
+                  className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <span className="text-amber-400 font-bold">{progressPercent}%</span>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* Mobile Navigation Drawer */}
+      {isMobileDrawerOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsMobileDrawerOpen(false);
+          }}
+        >
+          <div className="w-[85vw] max-w-sm h-full bg-zinc-900 border-r border-zinc-800 p-5 flex flex-col justify-between overflow-y-auto animate-slideRight text-zinc-100">
+            <div>
+              {/* Drawer Top / User info */}
+              <div className="flex items-center justify-between pb-4 border-b border-zinc-800 mb-4">
+                {currentUser ? (
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 text-zinc-950 font-black flex items-center justify-center text-sm shadow-md shadow-amber-500/20">
+                      {currentUser.username.slice(0, 1).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="text-sm font-black text-zinc-100 flex items-center gap-1.5">
+                        <span>{currentUser.username}</span>
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      </div>
+                      <div className="text-[10px] text-amber-400 font-semibold">专属隔离空间已启用</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm font-bold text-zinc-300">访客浏览模式</div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsMobileDrawerOpen(false)}
+                  aria-label="关闭控制面板"
+                  title="关闭控制面板"
+                  className="w-8 h-8 rounded-full bg-zinc-800 text-zinc-400 hover:text-zinc-100 flex items-center justify-center active:scale-90 transition-all"
+                >
+                  <IconClose className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Projects Section */}
+              <div className="mb-5">
+                <div className="flex items-center justify-between mb-2.5">
+                  <span className="text-[11px] font-black uppercase tracking-widest text-zinc-400">学习技能树 (目标)</span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileDrawerOpen(false);
+                        setGeneratorPreDoc(null);
+                        setIsAIGeneratorOpen(true);
+                      }}
+                      className="p-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950"
+                      title="AI 读教材建树"
+                    >
+                      <IconSparkles className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileDrawerOpen(false);
+                        setIsCreateProjectOpen(true);
+                      }}
+                      className="p-1.5 rounded-lg bg-zinc-800 text-amber-400 border border-zinc-700"
+                      title="新建技能树"
+                    >
+                      <IconPlus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedProject(null);
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between ${
+                      !selectedProject
+                        ? 'bg-zinc-800 border border-amber-500/40 text-amber-300 shadow-sm'
+                        : 'text-zinc-400 hover:bg-zinc-850'
+                    }`}
+                  >
+                    <span>全部路线</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">
+                      {projects.reduce((sum, p) => sum + p.taskCount, 0)}
+                    </span>
+                  </button>
+
+                  {projects.map(p => {
+                    const projectObj = (p.project as any)?.project || p.project;
+                    const pId = projectObj?.id;
+                    const pName = projectObj?.name || '未命名技能树';
+                    if (!pId) return null;
+                    return (
+                      <button
+                        key={pId}
+                        type="button"
+                        onClick={() => {
+                          setSelectedProject(pId);
+                          setIsMobileDrawerOpen(false);
+                        }}
+                        className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between ${
+                          selectedProject === pId
+                            ? 'bg-zinc-800 border border-amber-500/40 text-amber-300 shadow-sm'
+                            : 'text-zinc-400 hover:bg-zinc-850'
+                        }`}
+                      >
+                        <span className="truncate pr-2">{pName}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 flex-shrink-0">
+                          {p.taskCount}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Core Features Section */}
+              <div className="mb-5 space-y-2">
+                <span className="text-[11px] font-black uppercase tracking-widest text-zinc-400 block mb-2">专属工具箱</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileDrawerOpen(false);
+                    if (!currentUser) setIsAuthModalOpen(true);
+                    else setIsDocManagerOpen(true);
+                  }}
+                  className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold bg-zinc-950/80 border border-amber-500/30 text-amber-300 flex items-center gap-2.5 active:scale-95 transition-all"
+                >
+                  <IconBook className="w-4 h-4 text-amber-400" />
+                  <span>我的专属资料库 (教材管理)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileDrawerOpen(false);
+                    setIsAISettingsOpen(true);
+                  }}
+                  className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold bg-zinc-950/80 border border-zinc-800 text-zinc-300 flex items-center gap-2.5 active:scale-95 transition-all"
+                >
+                  <IconSettings className="w-4 h-4 text-amber-400" />
+                  <span>AI 大模型与 Key 配置</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileDrawerOpen(false);
+                    setIsTagManagerOpen(true);
+                  }}
+                  className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold bg-zinc-950/80 border border-zinc-800 text-zinc-300 flex items-center gap-2.5 active:scale-95 transition-all"
+                >
+                  <IconPin className="w-4 h-4 text-amber-400" />
+                  <span>知识标签管理</span>
+                </button>
+              </div>
+
+              {/* View Preferences Section */}
+              <div className="mb-4 space-y-2.5">
+                <span className="text-[11px] font-black uppercase tracking-widest text-zinc-400 block mb-1">视图与筛选</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCardMode('compact')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg border ${
+                      cardMode === 'compact'
+                        ? 'bg-zinc-800 text-amber-300 border-amber-500/40'
+                        : 'bg-zinc-950 border-zinc-800 text-zinc-400'
+                    }`}
+                  >
+                    紧凑卡片
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCardMode('detailed')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg border ${
+                      cardMode === 'detailed'
+                        ? 'bg-zinc-800 text-amber-300 border-amber-500/40'
+                        : 'bg-zinc-950 border-zinc-800 text-zinc-400'
+                    }`}
+                  >
+                    详细卡片
+                  </button>
+                </div>
+
+                <div className="flex gap-1.5">
+                  {(['all', 'active', 'completed'] as StatusFilter[]).map(f => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setStatusFilter(f)}
+                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg capitalize border ${
+                        statusFilter === f
+                          ? 'bg-zinc-800 text-amber-300 border-amber-500/40'
+                          : 'bg-zinc-950 border-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      {f === 'all' ? '全部' : f === 'active' ? '进行中' : '已掌握'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Drawer Bottom */}
+            <div className="pt-4 border-t border-zinc-800 text-xs">
+              {currentUser ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileDrawerOpen(false);
+                    handleLogout();
+                  }}
+                  className="w-full py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl font-bold flex items-center justify-center gap-2"
+                >
+                  <IconLogout className="w-4 h-4" />
+                  <span>退出登录 ({currentUser.username})</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileDrawerOpen(false);
+                    setIsAuthModalOpen(true);
+                  }}
+                  className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 rounded-xl font-black flex items-center justify-center gap-2 shadow-md shadow-amber-500/20"
+                >
+                  <IconLock className="w-4 h-4" />
+                  <span>登录 / 注册专属空间</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Header (>= md) */}
+      <header className="hidden md:flex mb-6 flex-wrap justify-between items-center gap-4 bg-zinc-900/80 backdrop-blur-xl p-4 rounded-2xl border border-zinc-800 shadow-2xl">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-zinc-950 text-xl shadow-lg shadow-amber-500/20 font-black">
             <IconLightning className="w-5 h-5 text-zinc-950" />
           </div>
           <div>
             <h1 className="text-xl font-black text-zinc-100 tracking-tight flex items-center gap-2">
-              Agent<span className="text-amber-400">Learn</span>
+              智学<span className="text-amber-400">工坊</span>
               <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                模块化技能进阶
+                专属进阶学习平台
               </span>
             </h1>
-            <p className="text-xs text-zinc-400 font-medium">Antigravity × Gemini 导师协同系统</p>
+            <p className="text-xs text-zinc-400 font-medium">直连大模型 API · 多账号独立隔离 · 知识库投喂</p>
           </div>
         </div>
 
@@ -1217,7 +1761,7 @@ const App: React.FC = () => {
               } disabled:cursor-not-allowed disabled:opacity-40`}
             >
               <IconTree className="w-3.5 h-3.5" />
-              <span>技能拓扑图 (Graph)</span>
+              <span>知识拓扑图</span>
             </button>
             <button
               type="button"
@@ -1229,7 +1773,7 @@ const App: React.FC = () => {
               }`}
             >
               <IconKanban className="w-3.5 h-3.5" />
-              <span>模块看板 (Kanban)</span>
+              <span>阶段看板</span>
             </button>
           </div>
 
@@ -1351,9 +1895,53 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-col gap-6 lg:h-[calc(100vh-10.5rem)] lg:flex-row">
+      {/* Multi-tenant User Isolation Status Banner */}
+      {!currentUser ? (
+        <div className="mb-6 bg-amber-500/10 border border-amber-500/30 px-5 py-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-lg backdrop-blur-md animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold flex-shrink-0">
+              <IconLock className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-black text-amber-300">当前处于【访客浏览】模式</div>
+              <div className="text-[11px] text-zinc-400 mt-0.5">
+                登录或注册账号后，即可享有与家人<strong>完全物理隔离</strong>的专属电子书资料库、学习路线与即时 AI 导师辅导空间。
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsAuthModalOpen(true)}
+            className="px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black rounded-xl text-xs hover:brightness-105 shadow-md shadow-amber-500/20 transition-all active:scale-95 flex items-center gap-1.5"
+          >
+            <IconLock className="w-3.5 h-3.5" />
+            <span>登录 / 注册专属空间</span>
+          </button>
+        </div>
+      ) : (
+        <div className="mb-6 bg-zinc-900/60 border border-zinc-800/80 px-5 py-2.5 rounded-2xl flex flex-wrap items-center justify-between gap-2 shadow-lg backdrop-blur-md animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/50" />
+            <span className="text-xs text-zinc-300">
+              已进入专属隔离空间：<strong className="text-amber-400 font-black text-sm">{currentUser.username}</strong>
+            </span>
+            <span className="text-[11px] text-zinc-400 hidden sm:inline">
+              （上传的电子书资料、生成的技能树及 AI 对话均严格物理隔离保密）
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsAuthModalOpen(true)}
+            className="text-xs text-amber-400 hover:text-amber-300 hover:underline font-bold transition-all"
+          >
+            切换其他账号
+          </button>
+        </div>
+      )}
+
+      <div className="flex min-h-0 flex-col gap-4 lg:gap-6 h-[calc(100vh-135px)] sm:h-[calc(100vh-160px)] lg:h-[calc(100vh-10.5rem)] lg:flex-row">
         <aside
-          className={`flex min-h-0 flex-shrink-0 flex-col rounded-[28px] border border-zinc-800/80 bg-zinc-900/60 p-4 shadow-xl backdrop-blur-xl transition-all duration-300 lg:h-full ${
+          className={`hidden lg:flex min-h-0 flex-shrink-0 flex-col rounded-[28px] border border-zinc-800/80 bg-zinc-900/60 p-4 shadow-xl backdrop-blur-xl transition-all duration-300 lg:h-full ${
             isProjectSidebarCollapsed ? 'lg:w-24' : 'lg:w-60'
           }`}
         >
@@ -1471,10 +2059,10 @@ const App: React.FC = () => {
               className={`w-full flex items-center text-xs font-bold text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 rounded-xl transition-all active:scale-[0.98] ${
                 isProjectSidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'
               }`}
-              title="导出全部数据 (JSON)"
+              title="备份与导出数据"
             >
               <IconUpload className="w-4 h-4 text-amber-400 rotate-180 flex-shrink-0" />
-              {!isProjectSidebarCollapsed && <span>导出数据</span>}
+              {!isProjectSidebarCollapsed && <span>导出备份</span>}
             </button>
             <label
               className={`w-full flex items-center text-xs font-bold text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 rounded-xl transition-all cursor-pointer active:scale-[0.98] ${
@@ -1483,7 +2071,7 @@ const App: React.FC = () => {
               title={isProjectSidebarCollapsed ? '导入备份数据' : undefined}
             >
               <IconUpload className="w-4 h-4 text-amber-400 flex-shrink-0" />
-              {!isProjectSidebarCollapsed && <span>导入数据</span>}
+              {!isProjectSidebarCollapsed && <span>导入备份</span>}
               <input
                 type="file"
                 accept=".json,application/json"
@@ -1511,7 +2099,7 @@ const App: React.FC = () => {
               </svg>
               {!isProjectSidebarCollapsed && (
                 <span className="flex min-w-0 items-center justify-between gap-3 w-full">
-                  <span className="truncate">GitHub</span>
+                  <span className="truncate">平台版本</span>
                   <span className="rounded-full bg-zinc-800 border border-zinc-700/60 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-zinc-400">
                     v{appMeta.version}
                   </span>
@@ -1553,11 +2141,85 @@ const App: React.FC = () => {
           )}
           {workspaceMode === 'kanban' ? (
             <div className="flex h-full min-h-0 flex-col">
-              <div className="mb-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">
+              {/* Mobile Stage Tab Selector (< md) */}
+              <div className="md:hidden flex items-center gap-1.5 mb-3 overflow-x-auto pb-1">
+                {KANBAN_COLUMNS.map(column => {
+                  const columnTasks = getTasksByStatus(column);
+                  const statusConfig = STATUS_CONFIG[column];
+                  const isActive = mobileKanbanTab === column;
+                  return (
+                    <button
+                      key={column}
+                      type="button"
+                      onClick={() => setMobileKanbanTab(column)}
+                      className={`flex-1 min-w-[76px] py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 active:scale-95 ${
+                        isActive
+                          ? 'bg-amber-400 text-zinc-950 font-black shadow-md shadow-amber-500/20'
+                          : 'bg-zinc-900 border border-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      <span>{statusConfig.label}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                        isActive ? 'bg-zinc-950 text-amber-300' : 'bg-zinc-800 text-zinc-500'
+                      }`}>
+                        {columnTasks.length}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Mobile Stage Actions & Task List */}
+              <div className="md:hidden flex-1 min-h-0 overflow-y-auto space-y-2.5 pb-6">
+                <div className="flex items-center justify-between px-1 mb-2">
+                  <span className="text-xs font-bold text-zinc-400">
+                    {STATUS_CONFIG[mobileKanbanTab].label} ({getTasksByStatus(mobileKanbanTab).length})
+                  </span>
+                  <button
+                    onClick={() => {
+                      setCreateTaskStatus(mobileKanbanTab);
+                      setTaskFormError('');
+                      setNewTaskForm({ title: '', description: '', priority: 'medium', dueDate: '', showDueDate: false, tags: [] });
+                      setIsCreateTaskModalOpen(true);
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-zinc-850 text-amber-300 border border-amber-500/30 rounded-lg active:scale-95"
+                  >
+                    <IconPlus className="w-3.5 h-3.5" />
+                    <span>添加模块</span>
+                  </button>
+                </div>
+
+                {getTasksByStatus(mobileKanbanTab).length === 0 ? (
+                  <div className="py-12 text-center text-zinc-500 bg-zinc-900/40 rounded-2xl border border-zinc-850 p-6">
+                    <p className="text-xs font-medium">当前阶段暂无学习模块</p>
+                    <button
+                      onClick={() => {
+                        setCreateTaskStatus(mobileKanbanTab);
+                        setTaskFormError('');
+                        setNewTaskForm({ title: '', description: '', priority: 'medium', dueDate: '', showDueDate: false, tags: [] });
+                        setIsCreateTaskModalOpen(true);
+                      }}
+                      className="mt-2 text-xs text-amber-400 font-bold hover:underline"
+                    >
+                      + 立即添加学习模块
+                    </button>
+                  </div>
+                ) : (
+                  getTasksByStatus(mobileKanbanTab).map((taskItem) => (
+                    <div key={taskItem.task.id} className="animate-fadeIn">
+                      {renderTaskCard(taskItem)}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop task count header */}
+              <div className="hidden md:block mb-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">
                 {filteredTasks.length} {filteredTasks.length === 1 ? '个知识模块' : '个知识模块'}
               </div>
 
-              <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {/* Desktop 4-Column Grid */}
+              <div className="hidden md:grid flex-1 min-h-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {KANBAN_COLUMNS.map(column => {
                   const columnTasks = getTasksByStatus(column);
                   const statusConfig = STATUS_CONFIG[column];
@@ -1649,7 +2311,7 @@ const App: React.FC = () => {
 
       {isEditModalOpen && editingTask && (
         <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn"
+          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-2 sm:p-4 animate-fadeIn"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setIsEditModalOpen(false);
@@ -1657,11 +2319,11 @@ const App: React.FC = () => {
             }
           }}
         >
-          <div className="bg-zinc-900/95 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-slideUp border border-zinc-700/80 text-zinc-100">
+          <div className="bg-zinc-900/95 sm:rounded-2xl shadow-2xl w-full max-w-4xl h-full sm:h-auto sm:max-h-[92vh] flex flex-col overflow-hidden animate-slideUp border border-zinc-700/80 text-zinc-100">
             {/* Modal Header */}
-            <div className="p-5 sm:p-6 border-b border-zinc-800 flex items-center justify-between gap-4 bg-zinc-950/70">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 mb-1.5">
+            <div className="p-3 sm:p-6 border-b border-zinc-800 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 sm:gap-4 bg-zinc-950/70">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-1">
                   <span className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${STATUS_CONFIG[editingTask.status]?.bgColor} ${STATUS_CONFIG[editingTask.status]?.color}`}>
                     {STATUS_CONFIG[editingTask.status]?.label || editingTask.status}
                   </span>
@@ -1669,7 +2331,7 @@ const App: React.FC = () => {
                     {PRIORITY_CONFIG[editingTask.priority]?.label || editingTask.priority}
                   </span>
                 </div>
-                <h2 className="text-lg sm:text-xl font-black text-zinc-100 tracking-tight truncate">
+                <h2 className="text-base sm:text-xl font-black text-zinc-100 tracking-tight truncate">
                   {editingTask.title}
                 </h2>
               </div>
@@ -1677,12 +2339,33 @@ const App: React.FC = () => {
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button
                   type="button"
+                  onClick={handleEnrichTaskWithAI}
+                  disabled={isEnrichingTask}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:brightness-105 text-zinc-950 rounded-xl text-xs font-black transition-all shadow-md shadow-amber-500/20 active:scale-95 disabled:opacity-50"
+                  title="由 AI 自动研读资料库教材并生成详细讲义与核心考点"
+                >
+                  {isEnrichingTask ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
+                      <span className="hidden sm:inline">{enrichStatusText || 'AI 正在研读撰写...'}</span>
+                      <span className="sm:hidden">研读中...</span>
+                    </>
+                  ) : (
+                    <>
+                      <IconSparkles className="w-3.5 h-3.5 text-zinc-950" />
+                      <span className="hidden sm:inline">⚡ AI 读资料点亮填充</span>
+                      <span className="sm:hidden">⚡ AI填充</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleExportSingleNote(editingTask)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-850 text-amber-300 hover:text-amber-200 hover:bg-zinc-800 border border-amber-500/30 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95"
-                  title="导出本节讲义与笔记为 Markdown 文件"
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-zinc-850 text-amber-300 hover:text-amber-200 hover:bg-zinc-800 border border-amber-500/30 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95"
+                  title="导出本节讲义与笔记为本地文件"
                 >
                   <IconUpload className="w-3.5 h-3.5 rotate-180" />
-                  <span>导出笔记 (.md)</span>
+                  <span>导出笔记</span>
                 </button>
                 <button
                   type="button"
@@ -1698,7 +2381,7 @@ const App: React.FC = () => {
             </div>
 
             {/* Navigation Tabs */}
-            <div className="flex items-center gap-2 px-6 pt-3 pb-2 border-b border-zinc-800 bg-zinc-950/50">
+            <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-6 pt-2 sm:pt-3 pb-2 border-b border-zinc-800 bg-zinc-950/50 overflow-x-auto whitespace-nowrap">
               <button
                 type="button"
                 onClick={() => setModalActiveTab('courseware')}
@@ -1753,6 +2436,7 @@ const App: React.FC = () => {
             <div className="p-6 overflow-y-auto flex-1 min-h-0 bg-zinc-950/30 text-zinc-200">
               {modalActiveTab === 'courseware' && (
                 <div className="relative">
+                  {/* Floating Reactive AI Toolbar for Highlighted Text */}
                   {selectedHighlight && !isAnnotationModalOpen && (
                     <div
                       style={{
@@ -1762,28 +2446,106 @@ const App: React.FC = () => {
                         transform: 'translate(-50%, -100%)',
                         zIndex: 9999,
                       }}
-                      className="animate-bounce pointer-events-auto"
+                      className="pointer-events-auto flex items-center gap-1.5 p-1 bg-zinc-950/95 backdrop-blur-md rounded-2xl border border-amber-500/40 shadow-2xl animate-slideUp"
                     >
                       <button
                         type="button"
                         onMouseDown={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
+                          handleSaveAnnotation('', 'explain');
+                        }}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 hover:brightness-110 rounded-xl text-xs font-black shadow-md transition-all active:scale-95"
+                        title="无需打字，AI 立即深度解析该划选语句的核心原理与含义"
+                      >
+                        <IconLightning className="w-3.5 h-3.5 text-zinc-950" />
+                        <span>⚡ AI 即刻答疑</span>
+                      </button>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleSaveAnnotation('', 'example');
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-amber-300 rounded-xl text-xs font-bold border border-zinc-800 hover:border-amber-500/30 transition-all active:scale-95"
+                        title="AI 为此划选概念生成实操代码案例"
+                      >
+                        <IconSparkles className="w-3 h-3 text-amber-400" />
+                        <span>代码例题</span>
+                      </button>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setAnnotationIntent('doubt');
                           setIsAnnotationModalOpen(true);
                         }}
-                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-zinc-950 text-amber-300 hover:text-zinc-950 hover:bg-amber-400 rounded-full text-xs font-black shadow-2xl border border-amber-400/50 transition-all cursor-pointer active:scale-95"
+                        className="flex items-center gap-1 px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-zinc-100 rounded-xl text-xs font-bold border border-zinc-800 transition-all active:scale-95"
+                        title="输入你的自定义疑问或心得，AI 立即作答"
                       >
-                        <IconPin className="w-3.5 h-3.5" />
-                        <span>划词批注 / 提问</span>
+                        <IconPin className="w-3 h-3 text-zinc-400" />
+                        <span>自定义提问</span>
                       </button>
                     </div>
                   )}
 
-                  <div
-                    onMouseUp={handleCoursewareMouseUp}
-                    className="courseware-content max-w-none text-zinc-200 leading-relaxed select-text cursor-text"
-                    dangerouslySetInnerHTML={{ __html: marked.parse(editingTask.description || '*暂无讲义内容*') }}
-                  />
+                  {!editingTask.description || editingTask.description.trim().length < 30 ? (
+                    <div className="p-8 rounded-2xl bg-gradient-to-br from-amber-500/10 via-zinc-900 to-zinc-950 border border-amber-500/30 text-center space-y-4 my-4 shadow-xl">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10">
+                        <IconSparkles className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="text-base font-black text-zinc-100">该学习节点尚未生成详细讲义</h3>
+                        <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                          一键点亮此模块，AI 导师将自动研读私有资料库中的教材与大纲，为您深度提炼核心原理解析、典型实操代码与阶段过关自测题！
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleEnrichTaskWithAI}
+                        disabled={isEnrichingTask}
+                        className="px-6 py-2.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-zinc-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/20 active:scale-95 transition-all inline-flex items-center gap-2"
+                      >
+                        {isEnrichingTask ? (
+                          <>
+                            <span className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
+                            <span>{enrichStatusText || 'AI 导师正在研读教材并撰写讲义...'}</span>
+                          </>
+                        ) : (
+                          <>
+                            <IconLightning className="w-4 h-4 text-zinc-950" />
+                            <span>🌟 立即点亮并由 AI 研读资料填充卡片</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between pb-2 border-b border-zinc-800/60">
+                        <span className="text-[11px] text-zinc-400 flex items-center gap-1.5 font-medium">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                          <span>提示：鼠标在讲义中划选任何词句，AI 导师将即刻弹出解答</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleEnrichTaskWithAI}
+                          disabled={isEnrichingTask}
+                          className="text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1 rounded-lg flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
+                          title="重新调用 AI 研读资料库并扩充讲义"
+                        >
+                          <IconSparkles className="w-3 h-3" />
+                          <span>{isEnrichingTask ? 'AI 扩充撰写中...' : 'AI 研读资料扩充讲义'}</span>
+                        </button>
+                      </div>
+                      <div
+                        onMouseUp={handleCoursewareMouseUp}
+                        className="courseware-content max-w-none text-zinc-200 leading-relaxed select-text cursor-text"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(editingTask.description) }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1793,45 +2555,28 @@ const App: React.FC = () => {
                     <div>
                       <h3 className="text-sm font-black text-amber-300 flex items-center gap-2">
                         <IconPin className="w-4 h-4 text-amber-400" />
-                        <span>本模块划词批注与待答疑问</span>
+                        <span>划词批注与 AI 即时答疑</span>
                       </h3>
                       <p className="text-xs text-amber-200/80 mt-1">
-                        你在讲义中划选打上的所有批注已自动实时同步给本地文件。下次在 Antigravity 中只要发话呼叫导师，即可获取逐句攻坚解答！
+                        在课程讲义中划选任何词句，AI 导师均已在此生成专属深度解答。支持一键采纳写入讲义笔记！
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const moduleAnnotations = annotations.filter(a => a.taskId === editingTask.id);
-                        if (moduleAnnotations.length === 0) {
-                          alert('当前模块暂无批注');
-                          return;
-                        }
-                        const prompt = `Gemini老师，我在【${editingTask.title}】的讲义中做了以下几条批注和提问，请帮我逐条攻坚解答：\n\n` +
-                          moduleAnnotations.map((a, i) => `${i + 1}. 原文引用：【${a.selectedText}】\n   我的疑问：${a.comment}`).join('\n\n');
-                        navigator.clipboard.writeText(prompt);
-                        alert('已成功将全部批注提问复制到剪贴板！可以直接在聊天框粘贴发送给导师！');
-                      }}
-                      className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 rounded-xl text-xs font-black transition-all shadow-sm flex items-center gap-1.5 flex-shrink-0 active:scale-95"
-                    >
-                      <IconBook className="w-3.5 h-3.5" />
-                      <span>一键复制所有批注提问</span>
-                    </button>
                   </div>
 
                   {annotations.filter(a => a.taskId === editingTask.id).length === 0 ? (
                     <div className="text-center py-12 text-zinc-500">
                       <IconPin className="w-10 h-10 text-zinc-600 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm font-medium text-zinc-400">当前模块暂无批注</p>
-                      <p className="text-xs text-zinc-500 mt-1">回到「课程讲义」选项卡，用鼠标划选任何不懂的句子即可随时弹出批注提问！</p>
+                      <p className="text-sm font-medium text-zinc-400">当前模块暂无批注与答疑记录</p>
+                      <p className="text-xs text-zinc-500 mt-1">回到「课程讲义」选项卡，划选任何不懂的句子，点击「⚡ AI 即刻答疑」即可秒级生成解答！</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
                       {annotations.filter(a => a.taskId === editingTask.id).map((ann, idx) => (
-                        <div key={ann.id} className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/80 hover:border-amber-500/40 transition-all shadow-sm">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-black text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
-                              批注疑问 #{idx + 1}
+                        <div key={ann.id} className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/90 hover:border-amber-500/40 transition-all shadow-sm space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
+                              <IconPin className="w-3 h-3 text-amber-400" />
+                              <span>划词答疑 #{idx + 1}</span>
                             </span>
                             <div className="flex items-center gap-2">
                               <span className="text-[11px] text-zinc-500">{ann.createdAt}</span>
@@ -1846,13 +2591,69 @@ const App: React.FC = () => {
                               </button>
                             </div>
                           </div>
-                          <div className="p-3 bg-zinc-950 border-l-4 border-amber-400 rounded-r-lg mb-2.5 text-xs font-mono text-zinc-300 select-all leading-relaxed">
+
+                          {/* Highlight Text */}
+                          <div className="p-3 bg-zinc-950 border-l-4 border-amber-400 rounded-r-lg text-xs font-mono text-amber-100/90 leading-relaxed">
                             “{ann.selectedText}”
                           </div>
-                          <div className="text-sm font-bold text-zinc-100 flex items-start gap-2">
-                            <span className="text-amber-400 font-black flex-shrink-0">Q:</span>
-                            <span>{ann.comment}</span>
-                          </div>
+
+                          {/* User Note */}
+                          {ann.comment && (
+                            <div className="text-xs font-bold text-zinc-300 flex items-start gap-2 bg-zinc-950/60 p-2.5 rounded-lg border border-zinc-800/80">
+                              <span className="text-amber-400 font-black flex-shrink-0">💬 学员疑问:</span>
+                              <span>{ann.comment}</span>
+                            </div>
+                          )}
+
+                          {/* AI Response Card */}
+                          {ann.aiResponse ? (
+                            <div className="p-3.5 bg-amber-500/5 rounded-xl border border-amber-500/25 text-xs text-zinc-200 leading-relaxed space-y-2">
+                              <div className="flex items-center justify-between border-b border-amber-500/20 pb-1.5">
+                                <div className="flex items-center gap-1.5 text-amber-400 font-black">
+                                  <IconSparkles className="w-3.5 h-3.5 text-amber-400" />
+                                  <span>AI 导师即时解答</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAppendAnnotationToNotes(ann)}
+                                    className="text-[11px] font-bold text-amber-300 hover:text-amber-200 flex items-center gap-1 px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all active:scale-95"
+                                    title="将导师这句解答直接写入讲义笔记"
+                                  >
+                                    <IconCheck className="w-3 h-3 text-amber-400" />
+                                    <span>采纳写入笔记</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setModalActiveTab('gemini')}
+                                    className="text-[11px] font-bold text-zinc-300 hover:text-zinc-100 flex items-center gap-1 px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-all active:scale-95"
+                                    title="去 AI 导师伴学中进一步深入探讨"
+                                  >
+                                    <IconAI className="w-3 h-3 text-amber-400" />
+                                    <span>深度追问</span>
+                                  </button>
+                                </div>
+                              </div>
+                              <div
+                                className="courseware-content max-w-none text-zinc-300 leading-relaxed select-text"
+                                dangerouslySetInnerHTML={{ __html: renderMarkdown(ann.aiResponse) }}
+                              />
+                            </div>
+                          ) : ann.aiStatus === 'generating' ? (
+                            <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/30 flex items-center gap-2.5 text-xs text-amber-300 font-bold">
+                              <span className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                              <span>AI 导师正在研读上下文并针对划词解答中...</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleExplainExistingAnnotation(ann)}
+                              className="w-full py-2 bg-zinc-850 hover:bg-zinc-800 text-amber-300 border border-amber-500/30 hover:border-amber-500/60 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                            >
+                              <IconLightning className="w-3.5 h-3.5 text-amber-400" />
+                              <span>呼叫 AI 立即解答该批注疑问</span>
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1921,48 +2722,7 @@ const App: React.FC = () => {
                     onOpenAISettings={() => setIsAISettingsOpen(true)}
                   />
 
-                  {/* Fallback prompt copy card for Antigravity Agent interaction */}
-                  <div className="p-4 bg-zinc-950/80 rounded-xl border border-zinc-800">
-                    <div className="text-[11px] font-bold text-zinc-400 mb-2 flex items-center gap-1.5">
-                      <IconSparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>或复制 Prompt 到本地 Antigravity 聊天窗口提问：</span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(`Gemini老师，我想学【${editingTask.title}】，请用通俗易懂的生活例子给我讲透它的核心原理和代码逻辑！`);
-                          alert('已复制！切回 Antigravity 聊天窗口粘贴发送即可。');
-                        }}
-                        className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 rounded-lg border border-zinc-800 text-xs font-semibold text-zinc-300 hover:text-amber-300 shadow-sm transition-all active:scale-95 flex items-center gap-1.5"
-                      >
-                        <IconFileText className="w-3 h-3 text-amber-400" />
-                        <span>讲透核心原理 Prompt</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(`Gemini老师，我已经学习了【${editingTask.title}】，请出一道带代码或场景的填空测试题考考我，我答对后再帮我点亮！`);
-                          alert('已复制！切回 Antigravity 聊天窗口粘贴发送即可。');
-                        }}
-                        className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 rounded-lg border border-zinc-800 text-xs font-semibold text-zinc-300 hover:text-amber-300 shadow-sm transition-all active:scale-95 flex items-center gap-1.5"
-                      >
-                        <IconSparkles className="w-3 h-3 text-amber-400" />
-                        <span>实战考核题 Prompt</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(`Gemini老师，我已经通过了【${editingTask.title}】的实战练习，请帮我验收并点亮该模块！`);
-                          alert('已复制！切回 Antigravity 聊天窗口粘贴发送即可。');
-                        }}
-                        className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 rounded-lg border border-zinc-800 text-xs font-semibold text-zinc-300 hover:text-amber-300 shadow-sm transition-all active:scale-95 flex items-center gap-1.5"
-                      >
-                        <IconCheck className="w-3 h-3 text-amber-400" />
-                        <span>申请点亮模块 Prompt</span>
-                      </button>
-                    </div>
-                  </div>
+                  
                 </div>
               )}
             </div>
@@ -2077,12 +2837,12 @@ const App: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={handleSaveAnnotation}
-                disabled={!annotationComment.trim()}
-                className="px-5 py-2 text-xs font-black text-zinc-950 bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-md shadow-amber-500/20 active:scale-95 flex items-center gap-1.5"
+                onClick={() => handleSaveAnnotation(annotationComment, annotationIntent)}
+                disabled={!annotationComment.trim() && annotationIntent === 'doubt'}
+                className="px-5 py-2 text-xs font-black text-zinc-950 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-md shadow-amber-500/20 active:scale-95 flex items-center gap-1.5"
               >
-                <IconCheck className="w-3.5 h-3.5" />
-                <span>保存并同步批注</span>
+                <IconSparkles className="w-3.5 h-3.5 text-zinc-950" />
+                <span>⚡ 提交并获取 AI 即时解答</span>
               </button>
             </div>
           </div>
@@ -2129,7 +2889,7 @@ const App: React.FC = () => {
                 <textarea
                   value={newTaskForm.description}
                   onChange={(e) => setNewTaskForm({ ...newTaskForm, description: e.target.value })}
-                  placeholder="输入模块详细讲义或 Markdown 笔记..."
+                  placeholder="输入本模块的详细讲义内容或个人笔记..."
                   rows={3}
                   className="w-full px-3.5 py-2 text-xs bg-zinc-950 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 resize-none text-zinc-200 placeholder-zinc-500 leading-relaxed"
                 />
@@ -2229,7 +2989,7 @@ const App: React.FC = () => {
                   type="text"
                   value={newProject.name}
                   onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                  placeholder="例如：Pwn 二进制漏洞利用、Web渗透测试..."
+                  placeholder="例如：中医养生进阶、经典文学自学、二进制逆向攻防..."
                   className="w-full px-3.5 py-2.5 text-sm bg-zinc-950 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 font-medium text-zinc-100 placeholder-zinc-500"
                 />
               </div>
@@ -2308,11 +3068,14 @@ const App: React.FC = () => {
       <AISettingsModal
         isOpen={isAISettingsOpen}
         onClose={() => setIsAISettingsOpen(false)}
+        currentUserId={currentUser?.id}
       />
 
       <DocumentManagerModal
         isOpen={isDocManagerOpen}
         onClose={() => setIsDocManagerOpen(false)}
+        currentProjectId={selectedProject}
+        projects={projects}
         onGenerateRoadmap={(docId, docTitle) => {
           setGeneratorPreDoc({ id: docId, title: docTitle });
           setIsAIGeneratorOpen(true);
@@ -2327,6 +3090,34 @@ const App: React.FC = () => {
         }}
         preSelectedDocId={generatorPreDoc?.id}
         preSelectedDocTitle={generatorPreDoc?.title}
+        onBuildingProgress={(step, percent, topicName) => {
+          setActiveBuildingJob({
+            topicName,
+            step,
+            percent,
+            isDone: false,
+          });
+        }}
+        onBuildingComplete={async (createdProjectData, topicName) => {
+          setActiveBuildingJob({
+            topicName,
+            step: '知识图谱与技能树构建完成！',
+            percent: 100,
+            isDone: true,
+            projectData: createdProjectData,
+          });
+          await loadProjects();
+          if (createdProjectData?.project?.id) {
+            setSelectedProject(createdProjectData.project.id);
+            setWorkspaceMode('dependency');
+          }
+          setTimeout(() => {
+            setActiveBuildingJob(null);
+          }, 6000);
+        }}
+        onBuildingError={(error) => {
+          setActiveBuildingJob(prev => prev ? { ...prev, error, isDone: false } : null);
+        }}
         onSuccess={async (createdProjectData) => {
           await loadProjects();
           if (createdProjectData?.project?.id) {
@@ -2335,6 +3126,49 @@ const App: React.FC = () => {
           }
         }}
       />
+
+      {/* Floating Background Building Task Widget */}
+      {activeBuildingJob && (
+        <div className="fixed bottom-4 right-4 z-50 max-w-sm w-[90vw] sm:w-96 bg-zinc-900/95 border border-amber-500/50 p-4 rounded-2xl shadow-2xl backdrop-blur-xl animate-slideUp text-zinc-100">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${activeBuildingJob.error ? 'bg-rose-400' : activeBuildingJob.isDone ? 'bg-emerald-400' : 'bg-amber-400 animate-ping'}`} />
+              <span className={`text-xs font-black ${activeBuildingJob.error ? 'text-rose-300' : activeBuildingJob.isDone ? 'text-emerald-300' : 'text-amber-300'}`}>
+                {activeBuildingJob.error ? '构建失败' : activeBuildingJob.isDone ? '🎉 知识图谱已构建完成' : '⚡ AI 正在构建知识图谱'}
+              </span>
+            </div>
+            <span className="text-xs font-mono font-bold text-amber-400">{activeBuildingJob.percent}%</span>
+          </div>
+          <p className="text-xs text-zinc-100 font-bold truncate mb-1">
+            《{activeBuildingJob.topicName}》
+          </p>
+          <p className="text-[11px] text-zinc-400 mb-2 truncate">
+            {activeBuildingJob.error || activeBuildingJob.step || '正在提取核心考点与组织拓扑网...'}
+          </p>
+          <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden p-0.5 border border-zinc-700/60">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                activeBuildingJob.error
+                  ? 'bg-rose-500'
+                  : activeBuildingJob.isDone
+                  ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
+                  : 'bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-300 shadow-sm shadow-amber-500/40'
+              }`}
+              style={{ width: `${activeBuildingJob.percent}%` }}
+            />
+          </div>
+          <div className="mt-2.5 text-[10px] text-zinc-500 flex items-center justify-between">
+            <span>{activeBuildingJob.isDone ? '已自动为您载入新图谱' : activeBuildingJob.error ? '请检查网络或重新构建' : '后台正在深度拆解教材，可自由切换浏览'}</span>
+            <button
+              type="button"
+              onClick={() => setActiveBuildingJob(null)}
+              className="text-amber-400 hover:text-amber-200 font-bold px-2 py-0.5 rounded hover:bg-zinc-800 text-[11px] transition-colors"
+            >
+              {activeBuildingJob.isDone ? '知道了' : '隐藏'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

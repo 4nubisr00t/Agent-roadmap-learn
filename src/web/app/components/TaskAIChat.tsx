@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { marked } from 'marked';
+import { renderMarkdown, triggerMermaidRender } from '../utils/markdown.js';
 import { SYSTEM_PROMPTS, AISettingsState } from './modals/AISettingsModal.js';
-import { IconAI, IconUser, IconSend, IconTrash, IconSettings, IconFileText, IconSparkles, IconLightning } from './Icons.js';
+import { IconAI, IconUser, IconBook, IconSend, IconTrash, IconSettings, IconFileText, IconSparkles, IconLightning } from './Icons.js';
 
 interface Task {
   id: string;
@@ -84,6 +84,7 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
   useEffect(() => {
     try {
       localStorage.setItem(cacheKey, JSON.stringify(messages));
+      triggerMermaidRender();
     } catch {}
   }, [messages, cacheKey]);
 
@@ -149,15 +150,17 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
       ...newMessages.map(m => ({ role: m.role, content: m.content })),
     ];
 
+    const engine = cfg.mentorEngine || cfg;
+
     try {
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          provider: cfg.providerId,
-          baseUrl: cfg.baseUrl,
-          apiKey: cfg.apiKey,
-          model: cfg.model,
+          provider: engine.providerId,
+          baseUrl: engine.baseUrl,
+          apiKey: engine.apiKey,
+          model: engine.model,
           temperature: cfg.temperature ?? 0.7,
           messages: apiMessages,
         }),
@@ -237,7 +240,7 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
     </span>
   ) : (
     <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30">
-      未配置 API Key
+      未设置 AI 密钥
     </span>
   );
 
@@ -255,7 +258,7 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
               {currentProviderBadge}
             </div>
             <div className="text-[10px] text-zinc-400 font-mono">
-              挂载知识域：【{task.title}】
+              正在学习：【{task.title}】
             </div>
           </div>
         </div>
@@ -277,7 +280,7 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
             className="px-2.5 py-1 text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-lg transition-all flex items-center gap-1 active:scale-95"
           >
             <IconSettings className="w-3.5 h-3.5 text-amber-400" />
-            <span>配置供应商</span>
+            <span>设置 AI 模型</span>
           </button>
         </div>
       </div>
@@ -364,7 +367,7 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
                 ) : (
                   <div
                     className="courseware-content max-w-none text-zinc-200"
-                    dangerouslySetInnerHTML={{ __html: marked.parse(m.content) as string }}
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }}
                   />
                 )}
               </div>
@@ -387,7 +390,7 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
               {streamBuffer ? (
                 <div
                   className="courseware-content max-w-none text-zinc-200"
-                  dangerouslySetInnerHTML={{ __html: marked.parse(streamBuffer) as string }}
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(streamBuffer) }}
                 />
               ) : (
                 <div className="flex items-center gap-2 text-zinc-400">
