@@ -184,6 +184,23 @@ const App: React.FC = () => {
   } | null>(null);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
 
+  // Obsidian Vault & Live Note Studio
+  const [vaultStatus, setVaultStatus] = useState<{
+    available: boolean;
+    vaultPath: string;
+    targetFolder: string;
+    projectCount: number;
+    noteCount: number;
+    syncthingDetected: boolean;
+    message?: string;
+  } | null>(null);
+  const [isSyncingVault, setIsSyncingVault] = useState(false);
+  const [vaultSyncMessage, setVaultSyncMessage] = useState<string | null>(null);
+  const [noteStudioView, setNoteStudioView] = useState<'split' | 'edit' | 'preview'>('split');
+  const [noteAutoSaveState, setNoteAutoSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const noteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const autoSaveDebounceRef = useRef<any>(null);
+
   useEffect(() => {
     if (isEditModalOpen && (modalActiveTab === 'courseware' || modalActiveTab === 'annotations')) {
       setTimeout(() => {
@@ -253,6 +270,7 @@ const App: React.FC = () => {
       setWorkspaceMode(savedViewPreferences.workspaceMode);
     }
     fetchAnnotations();
+    fetchVaultStatus();
   }, []);
 
   // Persist selected project when it changes
@@ -639,6 +657,158 @@ const App: React.FC = () => {
     }
   };
 
+  // ==========================================
+  // Obsidian Vault & Syncthing Handlers
+  // ==========================================
+  const fetchVaultStatus = async () => {
+    try {
+      const res = await fetch('/api/vault/status');
+      if (res.ok) {
+        const data = await res.json();
+        setVaultStatus(data);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch vault status:', e);
+    }
+  };
+
+  const handleSyncTaskToObsidian = async (task: Task | null, silent = false) => {
+    if (!task) return;
+    const projId = tasks.find(t => t.task.id === task.id)?.project.id || selectedProject;
+    if (!projId) return;
+
+    try {
+      setNoteAutoSaveState('saving');
+      const res = await fetch('/api/vault/sync-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: projId, taskId: task.id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNoteAutoSaveState('saved');
+        if (!silent) {
+          setVaultSyncMessage(`✅ 已推送到 Obsidian: ${data.relativePath} (Syncthing 秒级多端同步中)`);
+          setTimeout(() => setVaultSyncMessage(null), 4000);
+        }
+        fetchVaultStatus();
+      } else {
+        setNoteAutoSaveState('idle');
+        if (!silent) alert(`同步 Obsidian 失败: ${data.error}`);
+      }
+    } catch (err: any) {
+      setNoteAutoSaveState('idle');
+      console.error('Failed to sync note to obsidian:', err);
+    }
+  };
+
+  const handleSyncCurrentProjectToObsidian = async () => {
+    if (!selectedProject) {
+      alert('请先选择一个知识图谱项目');
+      return;
+    }
+    const currentProj = projects.find(p => p.project.id === selectedProject)?.project;
+    if (!currentProj) return;
+
+    setIsSyncingVault(true);
+    try {
+      const res = await fetch('/api/vault/sync-project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: selectedProject }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`🎉 恭喜！已将「${currentProj.name}」的 ${data.syncedCount} 篇讲义与总览大纲 MOC 完整同步至 Obsidian Vault！\nSyncthing 守护进程将在数秒内推送到您的手机与平板客户端。`);
+        fetchVaultStatus();
+      } else {
+        alert(`同步 Obsidian 失败: ${data.error}`);
+      }
+    } catch (err: any) {
+      alert(`同步请求异常: ${err.message}`);
+    } finally {
+      setIsSyncingVault(false);
+    }
+  };
+
+  const handleReloadTaskFromObsidian = async () => {
+    if (!editingTask) return;
+    const projId = tasks.find(t => t.task.id === editingTask.id)?.project.id || selectedProject;
+    if (!projId) return;
+
+    try {
+      const res = await fetch(`/api/vault/read-task?projectId=${projId}&taskId=${editingTask.id}`);
+      const data = await res.json();
+      if (data.exists && data.content) {
+        setEditingTask(prev => prev ? { ...prev, description: data.content } : null);
+        setVaultSyncMessage('✅ 已从 Obsidian 笔记库载入最新修改');
+        setTimeout(() => setVaultSyncMessage(null), 3000);
+      } else {
+        alert('未在 Obsidian 中检测到外部更改或该文件尚未写入。');
+      }
+    } catch (err: any) {
+      alert(`读取错误: ${err.message}`);
+    }
+  };
+
+  const handleInsertSnippet = (prefix: string, suffix: string = '', defaultText: string = '') => {
+    const textarea = noteTextareaRef.current;
+    if (!textarea || !editingTask) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = editingTask.description || '';
+    const selected = text.substring(start, end) || defaultText;
+
+    const replacement = `${prefix}${selected}${suffix}`;
+    const newText = text.substring(0, start) + replacement + text.substring(end);
+
+    setEditingTask({ ...editingTask, description: newText });
+
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = start + prefix.length + selected.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 30);
+  };
+
+  const handleNoteContentChange = (newDescription: string) => {
+    if (!editingTask) return;
+    setEditingTask({ ...editingTask, description: newDescription });
+    setNoteAutoSaveState('saving');
+
+    if (autoSaveDebounceRef.current) {
+      clearTimeout(autoSaveDebounceRef.current);
+    }
+
+    autoSaveDebounceRef.current = setTimeout(async () => {
+      try {
+        const projId = tasks.find(t => t.task.id === editingTask.id)?.project.id || selectedProject;
+        if (!projId) return;
+
+        await fetch(`/api/tasks`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId: projId,
+            taskId: editingTask.id,
+            description: newDescription,
+          }),
+        });
+
+        setTasks(prev => prev.map(t =>
+          t.task.id === editingTask.id
+            ? { ...t, task: { ...t.task, description: newDescription } }
+            : t
+        ));
+
+        setNoteAutoSaveState('saved');
+      } catch {
+        setNoteAutoSaveState('idle');
+      }
+    }, 1200);
+  };
+
   // AI Read Materials & Enrich Task
   const handleEnrichTaskWithAI = async () => {
     if (!editingTask || !selectedProject) return;
@@ -815,7 +985,8 @@ const App: React.FC = () => {
   // Append AI annotation explanation directly into task notes
   const handleAppendAnnotationToNotes = async (ann: AnnotationItem) => {
     if (!editingTask || !selectedProject || !ann.aiResponse) return;
-    const appendBlock = `\n\n---\n### 💡 重点批注与导师解答\n> **📌 划词原文**：${ann.selectedText}\n> **💬 学员提问**：${ann.comment}\n\n${ann.aiResponse}\n`;
+    const formattedAi = ann.aiResponse.split('\n').join('\n> ');
+    const appendBlock = `\n\n> [!TIP] 重点批注与导师解答\n> **📌 划词原文**：${ann.selectedText}\n> **💬 学员提问**：${ann.comment}\n>\n> ${formattedAi}\n`;
     const newDescription = (editingTask.description || '') + appendBlock;
 
     try {
@@ -831,7 +1002,8 @@ const App: React.FC = () => {
       if (res.ok) {
         setEditingTask(prev => prev ? { ...prev, description: newDescription } : prev);
         setTasks(prev => prev.map(item => item.task.id === editingTask.id ? { ...item, task: { ...item.task, description: newDescription } } : item));
-        alert('已成功将导师解答写入本模块讲义笔记！');
+        handleSyncTaskToObsidian({ ...editingTask, description: newDescription }, true);
+        alert('已成功将导师解答写入本模块讲义笔记并同步至 Obsidian！');
       }
     } catch (e) {
       alert('写入笔记失败，请重试');
@@ -1892,6 +2064,21 @@ const App: React.FC = () => {
             <IconSettings className="w-3.5 h-3.5 text-amber-400" />
             <span>AI 配置</span>
           </button>
+          <button
+            type="button"
+            onClick={handleSyncCurrentProjectToObsidian}
+            disabled={isSyncingVault || !selectedProject}
+            title={vaultStatus?.available
+              ? `将当前知识图谱全量讲义与总览大纲同步至 Obsidian (${vaultStatus.vaultPath})，Syncthing 秒级推送到手机/平板/电脑`
+              : '同步至 Obsidian 笔记库'}
+            className="px-3.5 py-1.5 text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:border-amber-500/60 rounded-xl shadow-sm transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+          >
+            <span className="text-sm">💎</span>
+            <span>{isSyncingVault ? '同步 Obsidian 中...' : 'Obsidian 库同步'}</span>
+            {vaultStatus?.syncthingDetected && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="Syncthing 多端同步监听就绪" />
+            )}
+          </button>
         </div>
       </header>
 
@@ -2404,7 +2591,7 @@ const App: React.FC = () => {
                 }`}
               >
                 <IconEdit className="w-3.5 h-3.5" />
-                <span>讲义与笔记</span>
+                <span>✍️ 实时笔记 / Markdown Studio</span>
               </button>
               <button
                 type="button"
@@ -2523,21 +2710,32 @@ const App: React.FC = () => {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between pb-2 border-b border-zinc-800/60">
+                      <div className="flex flex-wrap items-center justify-between pb-2 border-b border-zinc-800/60 gap-2">
                         <span className="text-[11px] text-zinc-400 flex items-center gap-1.5 font-medium">
                           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                           <span>提示：鼠标在讲义中划选任何词句，AI 导师将即刻弹出解答</span>
                         </span>
-                        <button
-                          type="button"
-                          onClick={handleEnrichTaskWithAI}
-                          disabled={isEnrichingTask}
-                          className="text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1 rounded-lg flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
-                          title="重新调用 AI 研读资料库并扩充讲义"
-                        >
-                          <IconSparkles className="w-3 h-3" />
-                          <span>{isEnrichingTask ? 'AI 扩充撰写中...' : 'AI 研读资料扩充讲义'}</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setModalActiveTab('notes')}
+                            className="text-[11px] font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1 rounded-lg flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
+                            title="切换到即时笔记编辑工作室，随心写笔记与推导公式"
+                          >
+                            <IconEdit className="w-3 h-3 text-amber-400" />
+                            <span>✍️ 随时做笔记 / 深度编辑</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleEnrichTaskWithAI}
+                            disabled={isEnrichingTask}
+                            className="text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1 rounded-lg flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
+                            title="重新调用 AI 研读资料库并扩充讲义"
+                          >
+                            <IconSparkles className="w-3 h-3" />
+                            <span>{isEnrichingTask ? 'AI 扩充撰写中...' : 'AI 研读资料扩充讲义'}</span>
+                          </button>
+                        </div>
                       </div>
                       <div
                         onMouseUp={handleCoursewareMouseUp}
@@ -2662,32 +2860,46 @@ const App: React.FC = () => {
               )}
 
               {modalActiveTab === 'notes' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-300 mb-1">模块名称</label>
-                    <input
-                      type="text"
-                      value={editingTask.title}
-                      onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
-                      className="w-full px-3.5 py-2 text-sm bg-zinc-950 border border-zinc-800 text-zinc-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 font-medium"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-300 mb-1">讲义与 Markdown 笔记内容</label>
-                    <textarea
-                      value={editingTask.description || ''}
-                      onChange={(e) => setEditingTask({ ...editingTask, description: e.target.value })}
-                      rows={14}
-                      className="w-full px-3.5 py-2.5 text-xs font-mono bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 leading-relaxed"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-zinc-300 mb-1">掌握状态</label>
+                <div className="space-y-3">
+                  {/* Studio Status & Notification Toast */}
+                  {vaultSyncMessage && (
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded-xl text-xs font-bold flex items-center justify-between animate-fadeIn">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                        <span>{vaultSyncMessage}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setVaultSyncMessage(null)}
+                        className="text-xs text-emerald-400/80 hover:text-emerald-200"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Top Bar: Title & Metadata Row */}
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center bg-zinc-900/80 p-3 rounded-2xl border border-zinc-800/80">
+                    <div className="md:col-span-6">
+                      <label className="block text-[10px] font-black uppercase tracking-wider text-amber-400 mb-1">
+                        知识课题名称
+                      </label>
+                      <input
+                        type="text"
+                        value={editingTask.title}
+                        onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
+                        className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 text-zinc-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 font-bold"
+                        placeholder="输入知识点标题"
+                      />
+                    </div>
+                    <div className="md:col-span-3">
+                      <label className="block text-[10px] font-black uppercase tracking-wider text-zinc-400 mb-1">
+                        掌握状态
+                      </label>
                       <select
                         value={editingTask.status}
                         onChange={(e) => setEditingTask({ ...editingTask, status: e.target.value })}
-                        className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 text-zinc-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 font-bold"
+                        className="w-full px-2.5 py-1.5 text-xs bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 font-medium"
                       >
                         <option value="todo">待学习 / 待补齐</option>
                         <option value="in-progress">攻克中 (In Progress)</option>
@@ -2695,12 +2907,14 @@ const App: React.FC = () => {
                         <option value="done">已掌握点亮 (Done)</option>
                       </select>
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-zinc-300 mb-1">重要优先级</label>
+                    <div className="md:col-span-3">
+                      <label className="block text-[10px] font-black uppercase tracking-wider text-zinc-400 mb-1">
+                        考点优先级
+                      </label>
                       <select
                         value={editingTask.priority}
                         onChange={(e) => setEditingTask({ ...editingTask, priority: e.target.value })}
-                        className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 text-zinc-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 font-medium"
+                        className="w-full px-2.5 py-1.5 text-xs bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 font-medium"
                       >
                         <option value="critical">核心必备 (Critical)</option>
                         <option value="high">高度推荐 (High)</option>
@@ -2709,10 +2923,251 @@ const App: React.FC = () => {
                       </select>
                     </div>
                   </div>
+
+                  {/* Obsidian Sync Banner & Studio View Switcher */}
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 px-3 py-2 bg-zinc-950/70 border border-zinc-800/80 rounded-xl text-xs">
+                    <div className="flex items-center gap-2 text-zinc-400">
+                      <span className="flex items-center gap-1.5 text-amber-300 font-bold">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Obsidian 多端实时互通</span>
+                      </span>
+                      <span className="text-zinc-600">|</span>
+                      <span className="text-[11px] text-zinc-500 hidden sm:inline">
+                        {vaultStatus?.available ? 'Syncthing 监听推送中 (/home/anubis/obsidian_vault)' : '本地模式'}
+                      </span>
+                      {noteAutoSaveState === 'saving' && (
+                        <span className="text-[11px] text-amber-400 flex items-center gap-1 animate-pulse">
+                          <span>⏳ 自动保存中...</span>
+                        </span>
+                      )}
+                      {noteAutoSaveState === 'saved' && (
+                        <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+                          <span>✓ 已自动保存</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {/* View Mode Buttons */}
+                      <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setNoteStudioView('split')}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all ${
+                            noteStudioView === 'split'
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              : 'text-zinc-400 hover:text-zinc-200'
+                          }`}
+                          title="分屏模式：左边编辑 Markdown，右边实时预览 KaTeX 与 Callout"
+                        >
+                          分屏即写即看
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNoteStudioView('edit')}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all ${
+                            noteStudioView === 'edit'
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              : 'text-zinc-400 hover:text-zinc-200'
+                          }`}
+                          title="纯净编辑"
+                        >
+                          纯净编写
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNoteStudioView('preview')}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all ${
+                            noteStudioView === 'preview'
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              : 'text-zinc-400 hover:text-zinc-200'
+                          }`}
+                          title="纯净研读预览"
+                        >
+                          渲染预览
+                        </button>
+                      </div>
+
+                      {/* Push to Obsidian */}
+                      <button
+                        type="button"
+                        onClick={() => handleSyncTaskToObsidian(editingTask)}
+                        className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all active:scale-95"
+                        title="立即将当前笔记推送到 Obsidian 库"
+                      >
+                        <span>⚡ 推送 Obsidian</span>
+                      </button>
+
+                      {/* Pull from Obsidian */}
+                      <button
+                        type="button"
+                        onClick={handleReloadTaskFromObsidian}
+                        className="px-2.5 py-1 bg-zinc-850 hover:bg-zinc-800 text-zinc-300 border border-zinc-700/80 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all active:scale-95"
+                        title="如在手机 Obsidian 客户端中修改了笔记，点击从外部重载"
+                      >
+                        <span>🔄 外部重载</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Obsidian Markdown Quick Formatting Toolbar */}
+                  <div className="flex flex-wrap items-center gap-1 p-1.5 bg-zinc-900/90 border border-zinc-800 rounded-xl text-xs overflow-x-auto">
+                    <button
+                      type="button"
+                      onClick={() => handleInsertSnippet('**', '**', '粗体重点')}
+                      className="px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-300 font-bold rounded border border-zinc-800 text-[11px]"
+                      title="粗体"
+                    >
+                      B
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInsertSnippet('*', '*', '斜体文本')}
+                      className="px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-300 italic rounded border border-zinc-800 text-[11px]"
+                      title="斜体"
+                    >
+                      I
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInsertSnippet('==', '==', '高亮记忆')}
+                      className="px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-amber-300 rounded border border-zinc-800 text-[11px]"
+                      title="Obsidian 荧光高亮 =="
+                    >
+                      ==高亮==
+                    </button>
+                    <div className="w-[1px] h-4 bg-zinc-800 mx-1" />
+                    <button
+                      type="button"
+                      onClick={() => handleInsertSnippet('$', '$', 'E = mc^2')}
+                      className="px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-amber-300 font-serif rounded border border-zinc-800 text-[11px]"
+                      title="行内 KaTeX 数学公式 $...$"
+                    >
+                      $ 行内公式
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInsertSnippet('\n$$\n', '\n$$\n', '\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}')}
+                      className="px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-amber-300 font-serif rounded border border-zinc-800 text-[11px]"
+                      title="块级 KaTeX 独立公式推导 $$...$$"
+                    >
+                      $$ 块级推导
+                    </button>
+                    <div className="w-[1px] h-4 bg-zinc-800 mx-1" />
+                    <button
+                      type="button"
+                      onClick={() => handleInsertSnippet('\n> [!NOTE] 知识要点\n> ', '\n', '此处记录本节核心定义与基础概念')}
+                      className="px-2 py-1 bg-sky-950/40 hover:bg-sky-900/40 text-sky-300 rounded border border-sky-800/40 text-[11px]"
+                      title="Obsidian NOTE 知识卡片"
+                    >
+                      📌 NOTE
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInsertSnippet('\n> [!TIP] 提分技巧\n> ', '\n', '此处记录解题思路、思维模型或速记口诀')}
+                      className="px-2 py-1 bg-emerald-950/40 hover:bg-emerald-900/40 text-emerald-300 rounded border border-emerald-800/40 text-[11px]"
+                      title="Obsidian TIP 技巧卡片"
+                    >
+                      ✨ TIP
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInsertSnippet('\n> [!WARNING] 易错陷阱\n> ', '\n', '注意此处容易混淆的边界条件与反例')}
+                      className="px-2 py-1 bg-rose-950/40 hover:bg-rose-900/40 text-rose-300 rounded border border-rose-800/40 text-[11px]"
+                      title="Obsidian WARNING 警示卡片"
+                    >
+                      ⚠️ WARNING
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInsertSnippet('\n> [!IMPORTANT] 核心考点\n> ', '\n', '高频必考核心定理或机制')}
+                      className="px-2 py-1 bg-purple-950/40 hover:bg-purple-900/40 text-purple-300 rounded border border-purple-800/40 text-[11px]"
+                      title="Obsidian IMPORTANT 重点卡片"
+                    >
+                      💡 IMPORTANT
+                    </button>
+                    <div className="w-[1px] h-4 bg-zinc-800 mx-1" />
+                    <button
+                      type="button"
+                      onClick={() => handleInsertSnippet('\n```python\n', '\n```\n', '# Python 算法实现\ndef solution():\n    pass')}
+                      className="px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-300 font-mono rounded border border-zinc-800 text-[11px]"
+                      title="插入代码块"
+                    >
+                      💻 代码
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInsertSnippet('\n```mermaid\ngraph TD\n    A[前置知识] --> B[核心原理]\n    B --> C[实操运用]\n```\n')}
+                      className="px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-amber-300 font-mono rounded border border-zinc-800 text-[11px]"
+                      title="插入 Mermaid 流程/思维导图"
+                    >
+                      📊 Mermaid
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInsertSnippet('[[', ']]', '关联知识点')}
+                      className="px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-amber-300 font-mono rounded border border-zinc-800 text-[11px]"
+                      title="Obsidian 双向关联链接 [[知识点]]"
+                    >
+                      🔗 [[双链]]
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInsertSnippet('\n- [ ] ', '', '待复习关键题型')}
+                      className="px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-300 rounded border border-zinc-800 text-[11px]"
+                      title="任务清单"
+                    >
+                      ☑️ 清单
+                    </button>
+                  </div>
+
+                  {/* Main Studio Editor & Live Preview Panes */}
+                  <div className={`grid gap-3 ${noteStudioView === 'split' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+                    {/* Editor Pane */}
+                    {(noteStudioView === 'split' || noteStudioView === 'edit') && (
+                      <div className="flex flex-col">
+                        <div className="flex items-center justify-between pb-1.5 px-1 text-[11px] text-zinc-400 font-medium">
+                          <span>Markdown 实时笔记源码 (支持编写公式、代码、Callout)</span>
+                          <span className="text-zinc-500">快捷键 Ctrl+S 保存并推送到 Obsidian</span>
+                        </div>
+                        <textarea
+                          ref={noteTextareaRef}
+                          value={editingTask.description || ''}
+                          onChange={(e) => handleNoteContentChange(e.target.value)}
+                          onKeyDown={(e) => {
+                            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                              e.preventDefault();
+                              handleSyncTaskToObsidian(editingTask);
+                            }
+                          }}
+                          rows={18}
+                          placeholder="在这里随手记录学习笔记、推导步骤、代码随笔，或整理自己的速记卡片...&#10;支持 $数学公式$、```代码块```、> [!NOTE] 知识卡片 与 [[双向链接]]！"
+                          className="w-full flex-1 min-h-[460px] max-h-[580px] p-4 text-xs font-mono bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 leading-relaxed resize-y shadow-inner"
+                        />
+                      </div>
+                    )}
+
+                    {/* Live Rendered Preview Pane */}
+                    {(noteStudioView === 'split' || noteStudioView === 'preview') && (
+                      <div className="flex flex-col">
+                        <div className="flex items-center justify-between pb-1.5 px-1 text-[11px] text-amber-400/90 font-medium">
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                            <span>实时高保真渲染预览 (LaTeX / Callouts / 代码高亮)</span>
+                          </span>
+                          <span className="text-[10px] text-zinc-500">双向同步至移动端/桌面端 Obsidian</span>
+                        </div>
+                        <div
+                          className="courseware-content w-full flex-1 min-h-[460px] max-h-[580px] overflow-y-auto p-4 bg-zinc-950/70 border border-zinc-800 rounded-xl text-zinc-200 leading-relaxed select-text shadow-inner"
+                          dangerouslySetInnerHTML={{ __html: renderMarkdown(editingTask.description || '*在左侧开始编写你的学习笔记，此处将即时呈现排版效果...*') }}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
-              {modalActiveTab === 'gemini' && (
+                            {modalActiveTab === 'gemini' && (
                 <div className="space-y-4">
                   <TaskAIChat
                     task={editingTask}

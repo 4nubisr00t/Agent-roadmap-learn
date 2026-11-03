@@ -7,7 +7,7 @@ import fs, { existsSync } from 'node:fs';
 import type { Server } from 'http';
 import { storage } from '../storage/index.js';
 import os from 'node:os';
-import { DependencyViewService, TaskService, TagService, authService, aiService, documentService, bookPipelineService, ragService } from '../services/index.js';
+import { DependencyViewService, TaskService, TagService, authService, aiService, documentService, bookPipelineService, ragService, vaultService } from '../services/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -329,10 +329,18 @@ export function createServer(port: number = 7860): Promise<Server> {
           status: newStatus,
         });
 
+        // Trigger Obsidian Vault auto-sync in background
+        const finalTask = updateRes.success ? updateRes.data : { ...task, description: richDescription, status: newStatus };
+        if (projectData?.project && finalTask) {
+          vaultService.syncTaskNote(projectData.project, finalTask as any).catch(err => {
+            console.warn('[Vault] Auto-sync on enrich-task failed:', err);
+          });
+        }
+
         res.json({
           success: true,
           description: richDescription,
-          task: updateRes.success ? updateRes.data : { ...task, description: richDescription, status: newStatus },
+          task: finalTask,
         });
       } catch (err: any) {
         console.error('enrich-task error:', err);
@@ -1321,6 +1329,18 @@ export function createServer(port: number = 7860): Promise<Server> {
           res.status(statusCode).json({ error: result.error });
           return;
         }
+
+        // Asynchronously sync updated task note to Obsidian Vault
+        if (result.data) {
+          storage.readProject(projectId).then((proj) => {
+            if (proj?.project) {
+              vaultService.syncTaskNote(proj.project, result.data!).catch(e => {
+                console.warn('[Vault] Auto-sync on task update failed:', e);
+              });
+            }
+          }).catch(() => {});
+        }
+
         res.json({ success: true, data: result.data });
       } catch (error) {
         res.status(500).json({ error: (error as Error).message });
@@ -1339,6 +1359,136 @@ export function createServer(port: number = 7860): Promise<Server> {
         res.json({ success: true });
       } catch (error) {
         res.status(500).json({ error: (error as Error).message });
+      }
+    });
+
+    // ==========================================
+    // Obsidian Vault & Syncthing Integration APIs
+    // ==========================================
+    app.get('/api/vault/status', (_req, res) => {
+      try {
+        const status = vaultService.getStatus();
+        res.json(status);
+      } catch (err: any) {
+        res.status(500).json({ available: false, error: err.message });
+      }
+    });
+
+    app.post('/api/vault/sync-task', async (req, res) => {
+      try {
+        const { projectId, taskId } = req.body;
+        if (!projectId || !taskId) {
+          res.status(400).json({ success: false, error: '缺少 projectId 或 taskId' });
+          return;
+        }
+
+        const projectData = await storage.readProject(projectId);
+        if (!projectData?.project) {
+          res.status(404).json({ success: false, error: '未找到对应项目' });
+          return;
+        }
+
+        const taskResult = await TaskService.get(projectId, taskId);
+        if (!taskResult.success || !taskResult.data) {
+          res.status(404).json({ success: false, error: '未找到对应节点' });
+          return;
+        }
+
+        // Extract incoming & outgoing relations from views
+        const views = projectData.dependencyViews || [];
+        const incoming: string[] = [];
+        const outgoing: string[] = [];
+        const taskMap = new Map<string, string>();
+        for (const t of projectData.tasks) {
+          taskMap.set(t.id, t.title);
+        }
+
+        for (const v of views) {
+          for (const edge of v.edges) {
+            if (edge.toTaskId === taskId && taskMap.has(edge.fromTaskId)) {
+              incoming.push(taskMap.get(edge.fromTaskId)!);
+            }
+            if (edge.fromTaskId === taskId && taskMap.has(edge.toTaskId)) {
+              outgoing.push(taskMap.get(edge.toTaskId)!);
+            }
+          }
+        }
+
+        const syncResult = await vaultService.syncTaskNote(
+          projectData.project,
+          taskResult.data,
+          {
+            incoming: Array.from(new Set(incoming)),
+            outgoing: Array.from(new Set(outgoing)),
+          }
+        );
+
+        res.json(syncResult);
+      } catch (err: any) {
+        console.error('sync-task vault error:', err);
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    app.post('/api/vault/sync-project', async (req, res) => {
+      try {
+        const { projectId } = req.body;
+        if (!projectId) {
+          res.status(400).json({ success: false, error: '缺少 projectId' });
+          return;
+        }
+
+        const projectData = await storage.readProject(projectId);
+        if (!projectData?.project) {
+          res.status(404).json({ success: false, error: '未找到对应项目' });
+          return;
+        }
+
+        const views = projectData.dependencyViews || [];
+        const edges: Array<{ fromTaskId: string; toTaskId: string }> = [];
+        for (const v of views) {
+          for (const e of v.edges) {
+            edges.push({ fromTaskId: e.fromTaskId, toTaskId: e.toTaskId });
+          }
+        }
+
+        const result = await vaultService.syncProjectAll(
+          projectData.project,
+          projectData.tasks,
+          edges
+        );
+
+        res.json(result);
+      } catch (err: any) {
+        console.error('sync-project vault error:', err);
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    app.get('/api/vault/read-task', async (req, res) => {
+      try {
+        const { projectId, taskId } = req.query;
+        if (!projectId || !taskId) {
+          res.status(400).json({ exists: false, error: '缺少参数' });
+          return;
+        }
+
+        const projectData = await storage.readProject(projectId as string);
+        if (!projectData?.project) {
+          res.status(404).json({ exists: false, error: '项目不存在' });
+          return;
+        }
+
+        const taskResult = await TaskService.get(projectId as string, taskId as string);
+        if (!taskResult.success || !taskResult.data) {
+          res.status(404).json({ exists: false, error: '任务不存在' });
+          return;
+        }
+
+        const readResult = vaultService.readTaskNote(projectData.project, taskResult.data);
+        res.json(readResult);
+      } catch (err: any) {
+        res.status(500).json({ exists: false, error: err.message });
       }
     });
 

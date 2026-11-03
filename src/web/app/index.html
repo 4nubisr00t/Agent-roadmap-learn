@@ -6,6 +6,8 @@
     <title>智学工坊 | 专属成长进阶与知识库平台</title>
     <!-- KaTeX Mathematical Typography CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+    <!-- Highlight.js Syntax Highlighting CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/styles/atom-one-dark.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -230,6 +232,51 @@
             margin-bottom: 1.5rem; 
             border: 0; 
             border-top: 1px solid rgba(255, 255, 255, 0.08); 
+        }
+
+        /* Obsidian Callout Cards */
+        .obsidian-callout {
+            border-left-width: 4px;
+            border-radius: 0.75rem;
+            margin: 1.25rem 0;
+            padding: 0.95rem 1.15rem;
+            backdrop-filter: blur(8px);
+        }
+        .obsidian-callout .callout-header {
+            font-size: 0.75rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.45rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .obsidian-callout .callout-content {
+            font-size: 0.875rem;
+            line-height: 1.7;
+        }
+
+        /* KaTeX Block Polish */
+        .katex-block-wrapper {
+            margin: 1.25rem 0;
+            padding: 0.85rem 1rem;
+            background: rgba(18, 18, 21, 0.75);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 0.75rem;
+            overflow-x: auto;
+        }
+        .katex-block-wrapper .katex-display {
+            margin: 0.25rem 0 !important;
+        }
+
+        /* Obsidian WikiLink Chips */
+        .obsidian-wikilink {
+            transition: all 0.15s ease-in-out;
+            text-decoration: none;
+        }
+        .obsidian-wikilink:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.25);
         }
     </style>
 </head>

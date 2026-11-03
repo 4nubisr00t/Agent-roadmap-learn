@@ -1,5 +1,6 @@
+import katex from 'katex';
+import hljs from 'highlight.js';
 import { Marked } from 'marked';
-import markedKatex from 'marked-katex-extension';
 import mermaid from 'mermaid';
 
 // Initialize mermaid
@@ -19,34 +20,189 @@ mermaid.initialize({
   suppressErrorRendering: true,
 });
 
+// Setup Marked instance with custom code renderer
 const markedInstance = new Marked();
 
-// Use KaTeX extension for both block $$...$$ and inline $...$
-markedInstance.use(
-  markedKatex({
-    throwOnError: false,
-    nonStandard: true, // enables single $ inline math
-    output: 'htmlAndMathml',
-  })
-);
+markedInstance.use({
+  renderer: {
+    code({ text, lang }: { text: string; lang?: string }) {
+      if (lang === 'mermaid') {
+        const id = 'mermaid_' + Math.random().toString(36).slice(2, 9);
+        return `<div class="mermaid-container my-3 overflow-x-auto rounded-xl bg-obsidian-900/80 p-3 border border-amber-500/20 shadow-inner text-center"><div class="mermaid" id="${id}">${text}</div></div>`;
+      }
 
-// Custom renderer for mermaid code blocks
-const renderer = {
-  code({ text, lang }: { text: string; lang?: string }) {
-    if (lang === 'mermaid') {
-      const id = 'mermaid_' + Math.random().toString(36).slice(2, 9);
-      return `<div class="mermaid-container my-3 overflow-x-auto rounded-xl bg-obsidian-900/80 p-3 border border-amber-500/20 shadow-inner text-center"><div class="mermaid" id="${id}">${text}</div></div>`;
-    }
-    return false; // let marked use default code block
+      const validLang = lang && hljs.getLanguage(lang) ? lang : '';
+      let highlighted = '';
+      try {
+        highlighted = validLang
+          ? hljs.highlight(text, { language: validLang }).value
+          : hljs.highlightAuto(text).value;
+      } catch {
+        highlighted = text;
+      }
+
+      const langDisplay = (validLang || 'CODE').toUpperCase();
+
+      return `<div class="code-block-wrapper my-3 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950/90 shadow-md">
+        <div class="code-block-header flex items-center justify-between px-3.5 py-1.5 bg-zinc-900/90 border-b border-zinc-800/80 text-[11px] font-mono text-zinc-400">
+          <span class="flex items-center gap-1.5 font-bold tracking-wider text-amber-400/90">${langDisplay}</span>
+          <button type="button" class="copy-code-btn text-xs text-zinc-400 hover:text-amber-300 transition-colors cursor-pointer select-none" data-code="${encodeURIComponent(text)}">复制</button>
+        </div>
+        <pre class="p-3.5 overflow-x-auto text-xs leading-relaxed font-mono"><code class="hljs ${validLang}">${highlighted}</code></pre>
+      </div>`;
+    },
   },
-};
+});
 
-markedInstance.use({ renderer });
+// Attach copy code listener in browser environment
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const btn = target?.closest('.copy-code-btn') as HTMLButtonElement | null;
+    if (btn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const code = decodeURIComponent(btn.getAttribute('data-code') || '');
+      navigator.clipboard.writeText(code).then(() => {
+        const originalText = btn.textContent;
+        btn.textContent = '已复制!';
+        btn.classList.add('text-emerald-400');
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.classList.remove('text-emerald-400');
+        }, 1800);
+      }).catch(err => {
+        console.warn('Clipboard write failed:', err);
+      });
+    }
+  });
+}
 
+/**
+ * High-fidelity Markdown renderer with Math Shielding, Obsidian Callouts, WikiLinks, and Code Highlighting
+ */
 export function renderMarkdown(content: string): string {
   if (!content) return '';
+
   try {
-    return markedInstance.parse(content) as string;
+    // Step 1: Shield code blocks and inline code so math symbols ($ / _) inside code are not touched
+    const codeTokens: string[] = [];
+    let text = content.replace(/(```[\s\S]*?```|`[^`\n]+?`)/g, (match) => {
+      const idx = codeTokens.length;
+      codeTokens.push(match);
+      return `%%CODE_TOKEN_${idx}%%`;
+    });
+
+    // Step 2: Shield math expressions and render directly via KaTeX (Math Shield)
+    const mathTokens: string[] = [];
+
+    // Block math: $$ ... $$
+    text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_match, math) => {
+      const idx = mathTokens.length;
+      try {
+        const rendered = katex.renderToString(math.trim(), { displayMode: true, throwOnError: false });
+        mathTokens.push(`<div class="katex-block-wrapper my-3 overflow-x-auto text-center py-2 px-3 bg-zinc-900/40 rounded-xl border border-zinc-800/50">${rendered}</div>`);
+      } catch {
+        mathTokens.push(`<div class="katex-error text-rose-400 text-xs font-mono my-2">${math}</div>`);
+      }
+      return `%%KATEX_TOKEN_${idx}%%`;
+    });
+
+    // Block math: \[ ... \]
+    text = text.replace(/\\\[([\s\S]+?)\\\]/g, (_match, math) => {
+      const idx = mathTokens.length;
+      try {
+        const rendered = katex.renderToString(math.trim(), { displayMode: true, throwOnError: false });
+        mathTokens.push(`<div class="katex-block-wrapper my-3 overflow-x-auto text-center py-2 px-3 bg-zinc-900/40 rounded-xl border border-zinc-800/50">${rendered}</div>`);
+      } catch {
+        mathTokens.push(`<div class="katex-error text-rose-400 text-xs font-mono my-2">${math}</div>`);
+      }
+      return `%%KATEX_TOKEN_${idx}%%`;
+    });
+
+    // Inline math: \( ... \)
+    text = text.replace(/\\\(([\s\S]+?)\\\)/g, (_match, math) => {
+      const idx = mathTokens.length;
+      try {
+        const rendered = katex.renderToString(math.trim(), { displayMode: false, throwOnError: false });
+        mathTokens.push(rendered);
+      } catch {
+        mathTokens.push(math);
+      }
+      return `%%KATEX_TOKEN_${idx}%%`;
+    });
+
+    // Inline math: $ ... $ (ensuring not matched across empty lines or double $$)
+    text = text.replace(/(?<!\\)\$([^\$\n\r]+?)(?<!\\)\$/g, (_match, math) => {
+      if (!math.trim()) return _match;
+      const idx = mathTokens.length;
+      try {
+        const rendered = katex.renderToString(math.trim(), { displayMode: false, throwOnError: false });
+        mathTokens.push(rendered);
+      } catch {
+        mathTokens.push(math);
+      }
+      return `%%KATEX_TOKEN_${idx}%%`;
+    });
+
+    // Step 3: Restore code tokens
+    text = text.replace(/%%CODE_TOKEN_(\d+)%%/g, (_match, idx) => {
+      return codeTokens[Number(idx)] || '';
+    });
+
+    // Step 4: Obsidian Callouts transform
+    // e.g. > [!NOTE] Optional Title
+    // > Body text
+    text = text.replace(/^>[ \t]*\[!([A-Za-z]+)\][ \t]*(.*)$((?:\n>[ \t]*.*$)*)/gm, (_match, type, title, body) => {
+      const calloutType = type.toLowerCase();
+      const cleanBody = body
+        ? body.split('\n').map(l => l.replace(/^>[ \t]?/, '')).join('\n')
+        : '';
+      const displayTitle = title.trim() || type.toUpperCase();
+
+      let colorClass = 'border-amber-500/40 bg-amber-500/5 text-amber-200';
+      let icon = '💡';
+      if (['tip', 'hint'].includes(calloutType)) {
+        colorClass = 'border-emerald-500/40 bg-emerald-500/5 text-emerald-200';
+        icon = '✨';
+      } else if (['warning', 'caution', 'danger', 'bug'].includes(calloutType)) {
+        colorClass = 'border-rose-500/40 bg-rose-500/5 text-rose-200';
+        icon = '⚠️';
+      } else if (['important', 'info', 'note'].includes(calloutType)) {
+        colorClass = 'border-sky-500/40 bg-sky-500/5 text-sky-200';
+        icon = 'ℹ️';
+      } else if (['example', 'code'].includes(calloutType)) {
+        colorClass = 'border-purple-500/40 bg-purple-500/5 text-purple-200';
+        icon = '📌';
+      }
+
+      return `<div class="obsidian-callout my-4 rounded-xl border-l-4 p-3.5 shadow-sm ${colorClass}">
+        <div class="callout-header flex items-center gap-2 font-bold text-xs uppercase tracking-wider mb-1.5">
+          <span>${icon}</span>
+          <span>${displayTitle}</span>
+        </div>
+        <div class="callout-content text-xs opacity-90 leading-relaxed">${cleanBody.trim()}</div>
+      </div>\n`;
+    });
+
+    // Step 5: Obsidian WikiLinks: [[Target Page|Alias]] or [[Target Page]]
+    text = text.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_match, target, alias) => {
+      const label = alias || target;
+      return `<span class="obsidian-wikilink inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 text-xs font-semibold border border-amber-500/30 cursor-pointer" data-wikilink="${encodeURIComponent(target.trim())}">🔗 ${label.trim()}</span>`;
+    });
+
+    // Step 6: Obsidian Highlights: ==Highlighted Text==
+    text = text.replace(/==([^=\n]+)==/g, '<mark class="bg-amber-400/25 text-amber-200 px-1 py-0.5 rounded font-semibold border-b border-amber-400/50">$1</mark>');
+
+    // Step 7: Parse Markdown
+    let html = markedInstance.parse(text) as string;
+
+    // Step 8: Restore KaTeX tokens
+    html = html.replace(/%%KATEX_TOKEN_(\d+)%%/g, (_match, idx) => {
+      return mathTokens[Number(idx)] || '';
+    });
+
+    return html;
   } catch (err) {
     console.warn('Markdown parse fallback:', err);
     return content;

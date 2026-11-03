@@ -6,4 +6,5 @@ export { AIService, aiService, PRESET_PROVIDERS } from './ai-service.js';
 export { DocumentService, documentService, type UserDocument, type UserDocumentSummary } from './document-service.js';
 export { BookPipelineService, bookPipelineService, type ParsedBookResult, type ParsedChapter, type PipelineProgress } from './book-pipeline-service.js';
 export { RagService, ragService, type TaskContextMeta, type BookChaptersData, type ChapterSlice } from './rag-service.js';
+export { VaultService, vaultService, type VaultStatus } from './vault-service.js';
 export * from './types.js';
