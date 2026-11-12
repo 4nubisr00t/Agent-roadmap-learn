@@ -129,44 +129,39 @@ export class BookPipelineService {
       throw new Error('未配置 AI 供应商或 Base URL');
     }
 
-    const endpoint = aiService.normalizeUrl(creds.baseUrl);
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (creds.apiKey) {
-      headers['Authorization'] = `Bearer ${creds.apiKey}`;
-    }
-
-    // Helper to call LLM with JSON output
+    // Helper to call LLM with JSON output (supports both Vertex Express & OpenAI gateways + retry + fallback)
     const callLLM = async (systemPrompt: string, userPrompt: string, temperature = 0.2): Promise<any> => {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model: creds.model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
+      try {
+        return await aiService.completeJson({
+          systemPrompt,
+          userPrompt,
           temperature,
-          stream: false,
-        }),
-      });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`大模型响应异常 (${res.status}): ${errText.slice(0, 200)}`);
+          provider: options.provider,
+          baseUrl: options.baseUrl,
+          apiKey: options.apiKey,
+          model: options.model,
+          retries: 1,
+        });
+      } catch (primaryErr) {
+        const keyStatus = aiService.getServerKeyStatus();
+        if (options.provider !== 'vertex-gemini' && keyStatus.vertex) {
+          onProgress?.({
+            step: 1,
+            totalSteps: 4,
+            message: '主建树引擎响应波动，正在自动切换 Vertex Gemini 3.8 Flash 兜底继续拆书...',
+            percent: 22,
+          });
+          return await aiService.completeJson({
+            systemPrompt,
+            userPrompt,
+            temperature,
+            provider: 'vertex-gemini',
+            model: 'gemini-3.8-flash',
+            retries: 1,
+          });
+        }
+        throw primaryErr;
       }
-
-      const json = await res.json();
-      const content = json.choices?.[0]?.message?.content || '';
-      let cleanContent = content.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
-      const firstBrace = cleanContent.indexOf('{');
-      const lastBrace = cleanContent.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace > firstBrace) {
-        cleanContent = cleanContent.slice(firstBrace, lastBrace + 1);
-      }
-      return JSON.parse(cleanContent);
     };
 
     // ========================================================

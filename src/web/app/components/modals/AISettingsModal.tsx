@@ -35,7 +35,7 @@ export interface AISettingsState {
 export const DEFAULT_BUILD_ENGINE: EngineConfig = {
   providerId: 'anubis-gateway',
   baseUrl: 'https://api.anubisroot.top/v1',
-  apiKey: 'sk-0448f4d2aacffacf756d555794703bf3d13f2487259d98da',
+  apiKey: '',
   model: 'deepseek-v4.1-flash',
 };
 
@@ -68,22 +68,40 @@ const DEFAULT_SETTINGS: AISettingsState = {
   mentorEngine: DEFAULT_MENTOR_ENGINE,
 };
 
-const normalizeSavedSettings = (parsed: any): AISettingsState => {
+export const normalizeSavedSettings = (parsed: any): AISettingsState => {
   if (!parsed || parsed.apiKey === 'sk-8edbc2d2456045068188e41b02d6d1b7') {
     return DEFAULT_SETTINGS;
   }
-  const buildEngine = parsed.buildEngine || DEFAULT_BUILD_ENGINE;
-  const mentorEngine = parsed.mentorEngine && parsed.mentorEngine.providerId === 'vertex-gemini'
-    ? parsed.mentorEngine
+  const buildEngine = parsed.buildEngine
+    ? { ...DEFAULT_BUILD_ENGINE, ...parsed.buildEngine }
+    : DEFAULT_BUILD_ENGINE;
+  const mentorEngine = parsed.mentorEngine
+    ? { ...DEFAULT_MENTOR_ENGINE, ...parsed.mentorEngine }
     : DEFAULT_MENTOR_ENGINE;
 
   return {
     ...DEFAULT_SETTINGS,
     ...parsed,
+    providerId: mentorEngine.providerId,
+    baseUrl: mentorEngine.baseUrl,
+    apiKey: mentorEngine.apiKey,
+    model: mentorEngine.model,
     buildEngine,
     mentorEngine,
   };
 };
+
+export function loadMergedAISettings(currentUserId?: string): AISettingsState {
+  try {
+    if (currentUserId) {
+      const userSaved = localStorage.getItem(`roadmap_ai_config_${currentUserId}`);
+      if (userSaved) return normalizeSavedSettings(JSON.parse(userSaved));
+    }
+    const saved = localStorage.getItem('roadmap_ai_config');
+    if (saved) return normalizeSavedSettings(JSON.parse(saved));
+  } catch {}
+  return DEFAULT_SETTINGS;
+}
 
 export const SYSTEM_PROMPTS = {
   mentor: DEFAULT_HUMAN_MENTOR_PROMPT,
@@ -125,6 +143,10 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
   const [fetchedModels, setFetchedModels] = useState<string[]>([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [fetchModelsMsg, setFetchModelsMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [serverKeys, setServerKeys] = useState<{ vertex: boolean; anubis: boolean }>({
+    vertex: false,
+    anubis: true,
+  });
 
   // Active slot current config view
   const currentEngine: EngineConfig = activeSlot === 'build'
@@ -195,24 +217,44 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
           }
         })
         .catch(() => {});
+
+      const token = localStorage.getItem('roadmap_auth_token');
+      fetch('/api/ai/config', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data?.success && data.data) {
+            if (data.data.serverKeys) {
+              setServerKeys(data.data.serverKeys);
+            }
+            const hasLocal = Boolean(localStorage.getItem(userConfigKey) || localStorage.getItem('roadmap_ai_config'));
+            if (!hasLocal && data.data.config) {
+              setSettings(normalizeSavedSettings(data.data.config));
+            }
+          }
+        })
+        .catch(() => {});
     }
-  }, [isOpen]);
+  }, [isOpen, userConfigKey]);
 
   if (!isOpen) return null;
+
+  const isHostedByServer =
+    (currentEngine.providerId === 'vertex-gemini' && serverKeys.vertex) ||
+    (currentEngine.providerId === 'anubis-gateway' && serverKeys.anubis);
 
   const handleProviderChange = (newProviderId: string) => {
     const preset = presets.find(p => p.id === newProviderId);
     if (preset) {
-      const savedKeys = JSON.parse(localStorage.getItem('roadmap_ai_keys_cache') || '{}');
-      const fallbackKey =
-        newProviderId === 'anubis-gateway'
-          ? 'sk-0448f4d2aacffacf756d555794703bf3d13f2487259d98da'
-          : (savedKeys[newProviderId] || '');
+      const cacheKey = currentUserId ? `roadmap_ai_keys_cache_${currentUserId}` : 'roadmap_ai_keys_cache';
+      const savedKeys = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+      const fallbackKey = savedKeys[newProviderId] || '';
       updateCurrentEngine({
         providerId: newProviderId,
         baseUrl: preset.baseUrl,
         model: preset.defaultModel,
-        apiKey: fallbackKey || currentEngine.apiKey,
+        apiKey: fallbackKey,
       });
     } else {
       updateCurrentEngine({ providerId: newProviderId });
@@ -270,6 +312,22 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
         localStorage.setItem(cacheKey, JSON.stringify(savedKeys));
       }
     } catch {}
+
+    // Persist to server config so another browser/mobile device stays synced
+    const token = localStorage.getItem('roadmap_auth_token');
+    if (token) {
+      fetch('/api/ai/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          mentorEngine: settings.mentorEngine,
+          buildEngine: settings.buildEngine,
+        }),
+      }).catch(() => {});
+    }
 
     if (onSave) {
       onSave(settings);
@@ -430,9 +488,16 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
           {/* API Key */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-bold text-zinc-300">
-                大模型访问密钥 (API Key)
-              </label>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-zinc-300">
+                  大模型访问密钥 (API Key)
+                </label>
+                {isHostedByServer && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                    🟢 服务端已托管密钥 · 留空即用
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setShowApiKey(!showApiKey)}
@@ -445,11 +510,17 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
               type={showApiKey ? 'text' : 'password'}
               value={currentEngine.apiKey}
               onChange={(e) => updateCurrentEngine({ apiKey: e.target.value })}
-              placeholder={currentPreset?.needApiKey ? 'sk-...' : '本地模型无需填写密钥，留空即可'}
+              placeholder={
+                isHostedByServer
+                  ? '已接入服务端托管密钥（留空即可直接使用，或填入个人密钥覆盖）'
+                  : currentPreset?.needApiKey
+                    ? 'sk-...'
+                    : '本地模型无需填写密钥，留空即可'
+              }
               className="w-full px-3.5 py-2 text-xs font-mono bg-zinc-950 border border-zinc-700/80 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-zinc-100 placeholder-zinc-500"
             />
             <p className="text-[10px] text-zinc-500 mt-1">
-              秘钥仅加密保留于您本地浏览器中，绝不上传任何外部第三方服务器
+              密钥支持随账号跨端同步；服务端托管供应商在留空时自动由后端安全代理调用
             </p>
           </div>
 

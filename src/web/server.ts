@@ -7,10 +7,16 @@ import fs, { existsSync } from 'node:fs';
 import type { Server } from 'http';
 import { storage } from '../storage/index.js';
 import os from 'node:os';
-import { DependencyViewService, TaskService, TagService, authService, aiService, documentService, bookPipelineService, ragService, vaultService } from '../services/index.js';
+import { DependencyViewService, TaskService, TagService, authService, aiService, documentService, bookPipelineService, ragService, vaultService, loadDotEnv } from '../services/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+loadDotEnv([
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(__dirname, '../../.env'),
+  path.resolve(__dirname, '../.env'),
+]);
 
 /**
  * Resolve the path to the web app static files using multiple fallback strategies.
@@ -197,9 +203,226 @@ export function createServer(port: number = 7860): Promise<Server> {
       }
     });
 
+    const aiConfigDir = path.join(os.homedir(), '.roadmap-skill');
+    const getAiConfigFile = (userId?: string) =>
+      path.join(aiConfigDir, userId ? `ai-config-${userId}.json` : 'ai-config-default.json');
+
+    const defaultDualConfig = () => ({
+      mentorEngine: {
+        providerId: 'vertex-gemini',
+        baseUrl: 'https://aiplatform.googleapis.com/v1/publishers/google/models',
+        apiKey: '',
+        model: 'gemini-3.8-flash',
+        systemPrompt: '',
+      },
+      buildEngine: {
+        providerId: 'anubis-gateway',
+        baseUrl: 'https://api.anubisroot.top/v1',
+        apiKey: '',
+        model: 'deepseek-v4.1-flash',
+      },
+    });
+
+    const cleanMarkdownFence = (text: string): string => {
+      let c = text.trim();
+      if (c.startsWith('```markdown')) {
+        c = c.replace(/^```markdown\s*/i, '').replace(/\s*```$/, '');
+      } else if (c.startsWith('```')) {
+        c = c.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+      return c.trim();
+    };
+
+    const collectTaskMaterialSnippets = async (
+      userId: string,
+      projectId: string,
+      task: { title: string; description?: string; tags?: string[] },
+      documentIds?: string[]
+    ): Promise<string> => {
+      let materialSnippets = '';
+      const userDocs = await documentService.list(userId);
+      if (Array.isArray(documentIds) && documentIds.length > 0) {
+        for (const docId of documentIds) {
+          const doc = await documentService.get(userId, docId);
+          if (doc) {
+            const snippet = await ragService.getPreciseContext(doc, {
+              title: task.title,
+              description: task.description,
+              tags: task.tags,
+            });
+            materialSnippets += `\n\n${snippet}`;
+          }
+        }
+      } else if (userDocs.length > 0) {
+        const projectDocs = userDocs.filter(d => d.projectId === projectId);
+        const candidateDocs = projectDocs.length > 0 ? projectDocs : userDocs;
+        for (const docSummary of candidateDocs.slice(0, 3)) {
+          const doc = await documentService.get(userId, docSummary.id);
+          if (doc) {
+            const snippet = await ragService.getPreciseContext(doc, {
+              title: task.title,
+              description: task.description,
+              tags: task.tags,
+            });
+            materialSnippets += `\n\n${snippet}`;
+          }
+        }
+      }
+      return materialSnippets;
+    };
+
+    const streamOpenAIDeltaSSE = async (
+      upstreamRes: globalThis.Response,
+      res: express.Response,
+      onComplete: (fullText: string) => Promise<Record<string, any>>
+    ): Promise<void> => {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      if (!upstreamRes.body) {
+        const donePayload = await onComplete('');
+        res.write(`data: ${JSON.stringify({ type: 'done', ...donePayload })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return;
+      }
+
+      const reader = upstreamRes.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const payload = trimmed.slice(5).trim();
+          if (!payload || payload === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(payload);
+            const delta = parsed.choices?.[0]?.delta?.content || '';
+            if (delta) {
+              fullText += delta;
+              res.write(`data: ${JSON.stringify({ type: 'delta', content: delta })}\n\n`);
+            }
+          } catch {
+            // Ignore malformed SSE fragment
+          }
+        }
+      }
+
+      const donePayload = await onComplete(fullText);
+      res.write(`data: ${JSON.stringify({ type: 'done', ...donePayload })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+    };
+
+    app.get('/api/ai/config', (req, res) => {
+      try {
+        const user = getAuthUser(req);
+        const serverKeys = aiService.getServerKeyStatus();
+        const candidateFiles = user
+          ? [getAiConfigFile(user.id), getAiConfigFile()]
+          : [getAiConfigFile()];
+
+        let savedConfig = defaultDualConfig();
+        for (const filePath of candidateFiles) {
+          if (fs.existsSync(filePath)) {
+            try {
+              const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+              savedConfig = {
+                mentorEngine: { ...savedConfig.mentorEngine, ...(parsed.mentorEngine || {}) },
+                buildEngine: { ...savedConfig.buildEngine, ...(parsed.buildEngine || {}) },
+              };
+              break;
+            } catch {}
+          }
+        }
+
+        res.json({
+          success: true,
+          data: {
+            config: savedConfig,
+            serverKeys,
+          },
+        });
+      } catch (error) {
+        res.status(500).json({ success: false, error: (error as Error).message });
+      }
+    });
+
+    app.post('/api/ai/config', (req, res) => {
+      try {
+        const user = getAuthUser(req);
+        if (!user) {
+          res.status(401).json({ success: false, error: '请先登录后保存云端 AI 配置' });
+          return;
+        }
+        fs.mkdirSync(aiConfigDir, { recursive: true });
+        const { mentorEngine, buildEngine } = req.body || {};
+        const merged = {
+          mentorEngine: { ...defaultDualConfig().mentorEngine, ...(mentorEngine || {}) },
+          buildEngine: { ...defaultDualConfig().buildEngine, ...(buildEngine || {}) },
+          updatedAt: new Date().toISOString(),
+        };
+        fs.writeFileSync(getAiConfigFile(user.id), JSON.stringify(merged, null, 2), 'utf-8');
+        res.json({ success: true, data: { config: merged, serverKeys: aiService.getServerKeyStatus() } });
+      } catch (error) {
+        res.status(500).json({ success: false, error: (error as Error).message });
+      }
+    });
+
     app.post('/api/ai/chat', async (req, res) => {
       try {
-        const upstreamRes = await aiService.streamChat(req.body);
+        const { projectId, taskId, messages, ...restBody } = req.body || {};
+        let enrichedMessages = Array.isArray(messages) ? [...messages] : [];
+
+        // Automatically inject full node lecture + RAG textbook snippet into AI mentor context
+        if (projectId && taskId) {
+          try {
+            const taskRes = await TaskService.get(projectId, taskId);
+            if (taskRes.success && taskRes.data) {
+              const t = taskRes.data;
+              let ragBlock = '';
+              const user = getAuthUser(req);
+              if (user) {
+                const snippet = await collectTaskMaterialSnippets(user.id, projectId, {
+                  title: t.title,
+                  description: t.description,
+                  tags: t.tags,
+                });
+                if (snippet.trim()) {
+                  ragBlock = `\n\n【关联教材原文切片】：\n${snippet.trim().slice(0, 6000)}`;
+                }
+              }
+              const fullDesc = t.description ? `\n\n【本节完整讲义与自测题】：\n${t.description.slice(0, 6000)}` : '';
+              if (fullDesc || ragBlock) {
+                const contextSystemMsg = {
+                  role: 'system' as const,
+                  content: `以下是当前学习节点【${t.title}】的完整课程上下文，回答学生提问或批改自测题时请严格参照这些内容：${fullDesc}${ragBlock}`,
+                };
+                if (enrichedMessages.length > 0 && enrichedMessages[0].role === 'system') {
+                  enrichedMessages = [enrichedMessages[0], contextSystemMsg, ...enrichedMessages.slice(1)];
+                } else {
+                  enrichedMessages = [contextSystemMsg, ...enrichedMessages];
+                }
+              }
+            }
+          } catch (ragErr) {
+            console.warn('[AI Chat] RAG context injection skipped:', ragErr);
+          }
+        }
+
+        const upstreamRes = await aiService.streamChat({
+          ...restBody,
+          messages: enrichedMessages,
+        });
         if (!upstreamRes.ok) {
           const errText = await upstreamRes.text();
           let msg = `Upstream error ${upstreamRes.status}: ${upstreamRes.statusText}`;
@@ -257,6 +480,7 @@ export function createServer(port: number = 7860): Promise<Server> {
           baseUrl,
           apiKey,
           model,
+          stream,
         } = req.body;
 
         if (!projectId || !taskId) {
@@ -271,43 +495,62 @@ export function createServer(port: number = 7860): Promise<Server> {
         }
 
         const task = taskResult.data;
-
-        // Collect relevant materials using precise chapter-aware RAG
-        let materialSnippets = '';
-        const userDocs = await documentService.list(user.id);
-
-        if (Array.isArray(documentIds) && documentIds.length > 0) {
-          for (const docId of documentIds) {
-            const doc = await documentService.get(user.id, docId);
-            if (doc) {
-              const snippet = await ragService.getPreciseContext(doc, {
-                title: task.title,
-                description: task.description,
-                tags: task.tags,
-              });
-              materialSnippets += `\n\n${snippet}`;
-            }
-          }
-        } else if (userDocs.length > 0) {
-          // Prioritize documents belonging to current project
-          const projectDocs = userDocs.filter(d => d.projectId === projectId);
-          const candidateDocs = projectDocs.length > 0 ? projectDocs : userDocs;
-          for (const docSummary of candidateDocs.slice(0, 3)) {
-            const doc = await documentService.get(user.id, docSummary.id);
-            if (doc) {
-              const snippet = await ragService.getPreciseContext(doc, {
-                title: task.title,
-                description: task.description,
-                tags: task.tags,
-              });
-              materialSnippets += `\n\n${snippet}`;
-            }
-          }
-        }
+        const materialSnippets = await collectTaskMaterialSnippets(user.id, projectId, task, documentIds);
 
         // Get project info
         const projectData = await storage.readProject(projectId);
         const projectTopic = projectData?.project?.name || '专属学习技能树';
+
+        const persistAndSync = async (rawDescription: string) => {
+          const richDescription = cleanMarkdownFence(rawDescription);
+          const newStatus = task.status === 'todo' ? 'in-progress' : task.status;
+          const updateRes = await TaskService.update(projectId, taskId, {
+            description: richDescription,
+            status: newStatus,
+          });
+          const finalTask = updateRes.success ? updateRes.data : { ...task, description: richDescription, status: newStatus };
+          if (projectData?.project && finalTask) {
+            vaultService.syncTaskNote(projectData.project, finalTask as any).catch(err => {
+              console.warn('[Vault] Auto-sync on enrich-task failed:', err);
+            });
+          }
+          return { richDescription, finalTask };
+        };
+
+        if (stream) {
+          const upstreamRes = await aiService.streamEnrichTaskNotes({
+            taskTitle: task.title,
+            taskDescription: task.description,
+            projectTopic,
+            materialSnippets: materialSnippets || '（未检索到直接上传的讲义文件，请结合标准知识库与权威技术原理深入阐述）',
+            targetLevel,
+            focusPrompt,
+            provider,
+            baseUrl,
+            apiKey,
+            model,
+          });
+
+          if (!upstreamRes.ok) {
+            const errText = await upstreamRes.text().catch(() => '');
+            let msg = `AI 生成讲义失败 (${upstreamRes.status})`;
+            try {
+              const parsed = JSON.parse(errText);
+              if (parsed.error?.message) msg = parsed.error.message;
+            } catch {}
+            res.status(upstreamRes.status).json({ error: msg });
+            return;
+          }
+
+          await streamOpenAIDeltaSSE(upstreamRes, res, async (fullText) => {
+            if (!fullText.trim()) {
+              throw new Error('AI 未返回有效讲义内容');
+            }
+            const { richDescription, finalTask } = await persistAndSync(fullText);
+            return { description: richDescription, task: finalTask };
+          });
+          return;
+        }
 
         const richDescription = await aiService.enrichTaskNotes({
           taskTitle: task.title,
@@ -322,20 +565,7 @@ export function createServer(port: number = 7860): Promise<Server> {
           model,
         });
 
-        // Automatically update task in storage and set status to in-progress if currently todo
-        const newStatus = task.status === 'todo' ? 'in-progress' : task.status;
-        const updateRes = await TaskService.update(projectId, taskId, {
-          description: richDescription,
-          status: newStatus,
-        });
-
-        // Trigger Obsidian Vault auto-sync in background
-        const finalTask = updateRes.success ? updateRes.data : { ...task, description: richDescription, status: newStatus };
-        if (projectData?.project && finalTask) {
-          vaultService.syncTaskNote(projectData.project, finalTask as any).catch(err => {
-            console.warn('[Vault] Auto-sync on enrich-task failed:', err);
-          });
-        }
+        const { finalTask } = await persistAndSync(richDescription);
 
         res.json({
           success: true,
@@ -344,7 +574,12 @@ export function createServer(port: number = 7860): Promise<Server> {
         });
       } catch (err: any) {
         console.error('enrich-task error:', err);
-        res.status(500).json({ error: err.message || 'AI 研读资料填充失败' });
+        if (!res.headersSent) {
+          res.status(500).json({ error: err.message || 'AI 研读资料填充失败' });
+        } else {
+          res.write(`data: ${JSON.stringify({ type: 'error', message: err.message || 'AI 研读资料填充失败' })}\n\n`);
+          res.end();
+        }
       }
     });
 
@@ -365,6 +600,7 @@ export function createServer(port: number = 7860): Promise<Server> {
           baseUrl,
           apiKey,
           model,
+          stream,
         } = req.body;
 
         if (!selectedText) {
@@ -388,13 +624,45 @@ export function createServer(port: number = 7860): Promise<Server> {
           } catch {}
         }
 
+        const mergedContext = chapterContext
+          ? `${contextText || ''}\n\n【教材关联原文章节背景】：\n${chapterContext.slice(0, 3500)}`
+          : contextText;
+
+        if (stream) {
+          const upstreamRes = await aiService.streamExplainAnnotation({
+            selectedText,
+            comment,
+            taskTitle: taskTitle || '当前课件',
+            contextText: mergedContext,
+            intent,
+            provider,
+            baseUrl,
+            apiKey,
+            model,
+          });
+
+          if (!upstreamRes.ok) {
+            const errText = await upstreamRes.text().catch(() => '');
+            let msg = `AI 解答失败 (${upstreamRes.status})`;
+            try {
+              const parsed = JSON.parse(errText);
+              if (parsed.error?.message) msg = parsed.error.message;
+            } catch {}
+            res.status(upstreamRes.status).json({ error: msg });
+            return;
+          }
+
+          await streamOpenAIDeltaSSE(upstreamRes, res, async (fullText) => ({
+            reply: cleanMarkdownFence(fullText),
+          }));
+          return;
+        }
+
         const reply = await aiService.explainAnnotation({
           selectedText,
           comment,
           taskTitle: taskTitle || '当前课件',
-          contextText: chapterContext
-            ? `${contextText}\n\n【教材关联原文章节背景】：\n${chapterContext.slice(0, 3500)}`
-            : contextText,
+          contextText: mergedContext,
           intent,
           provider,
           baseUrl,
@@ -405,7 +673,12 @@ export function createServer(port: number = 7860): Promise<Server> {
         res.json({ success: true, reply });
       } catch (err: any) {
         console.error('explain-annotation error:', err);
-        res.status(500).json({ error: err.message || 'AI 划词答疑失败' });
+        if (!res.headersSent) {
+          res.status(500).json({ error: err.message || 'AI 划词答疑失败' });
+        } else {
+          res.write(`data: ${JSON.stringify({ type: 'error', message: err.message || 'AI 划词答疑失败' })}\n\n`);
+          res.end();
+        }
       }
     });
 

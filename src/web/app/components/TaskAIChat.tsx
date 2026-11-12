@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { renderMarkdown, triggerMermaidRender } from '../utils/markdown.js';
-import { SYSTEM_PROMPTS, AISettingsState } from './modals/AISettingsModal.js';
+import { SYSTEM_PROMPTS, AISettingsState, loadMergedAISettings, normalizeSavedSettings } from './modals/AISettingsModal.js';
 import { IconAI, IconUser, IconBook, IconSend, IconTrash, IconSettings, IconFileText, IconSparkles, IconLightning } from './Icons.js';
 
 interface Task {
@@ -38,6 +38,7 @@ interface TaskAIChatProps {
   annotations: AnnotationItem[];
   currentUserId?: string;
   onOpenAISettings: () => void;
+  externalTrigger?: { id: number; prompt: string } | null;
 }
 
 export const TaskAIChat: React.FC<TaskAIChatProps> = ({
@@ -46,6 +47,7 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
   annotations,
   currentUserId,
   onOpenAISettings,
+  externalTrigger,
 }) => {
   const cacheKey = `roadmap_chat_${currentUserId || 'guest'}_${task.id}`;
 
@@ -60,17 +62,32 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamBuffer, setStreamBuffer] = useState('');
-  const [activeSettings, setActiveSettings] = useState<AISettingsState | null>(null);
+  const [activeSettings, setActiveSettings] = useState<AISettingsState>(() => loadMergedAISettings(currentUserId));
+  const [serverKeys, setServerKeys] = useState<{ vertex: boolean; anubis: boolean }>({ vertex: true, anubis: true });
+  const lastTriggerIdRef = useRef<number>(0);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('roadmap_ai_config');
-      if (saved) {
-        setActiveSettings(JSON.parse(saved));
-      }
-    } catch {}
-  }, []);
+    setActiveSettings(loadMergedAISettings(currentUserId));
+    const token = localStorage.getItem('roadmap_auth_token');
+    fetch('/api/ai/config', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data?.success && data.data) {
+          if (data.data.serverKeys) setServerKeys(data.data.serverKeys);
+          const hasLocal = Boolean(
+            (currentUserId && localStorage.getItem(`roadmap_ai_config_${currentUserId}`)) ||
+            localStorage.getItem('roadmap_ai_config')
+          );
+          if (!hasLocal && data.data.config) {
+            setActiveSettings(normalizeSavedSettings(data.data.config));
+          }
+        }
+      })
+      .catch(() => {});
+  }, [currentUserId]);
 
   useEffect(() => {
     try {
@@ -96,6 +113,13 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
     scrollToBottom();
   }, [messages, streamBuffer]);
 
+  useEffect(() => {
+    if (externalTrigger && externalTrigger.id !== lastTriggerIdRef.current && externalTrigger.prompt.trim()) {
+      lastTriggerIdRef.current = externalTrigger.id;
+      void handleSend(externalTrigger.prompt);
+    }
+  }, [externalTrigger]);
+
   const handleClearHistory = () => {
     if (confirm('确认清空当前节点的对话记录吗？')) {
       setMessages([]);
@@ -107,16 +131,21 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
     const textToSend = (userPromptText || input).trim();
     if (!textToSend || isStreaming) return;
 
-    let cfg: AISettingsState | null = activeSettings;
-    if (!cfg) {
-      try {
-        const raw = localStorage.getItem('roadmap_ai_config');
-        if (raw) cfg = JSON.parse(raw);
-      } catch {}
-    }
+    const cfg: AISettingsState = loadMergedAISettings(currentUserId);
+    const engine = cfg.mentorEngine || {
+      providerId: cfg.providerId,
+      baseUrl: cfg.baseUrl,
+      apiKey: cfg.apiKey,
+      model: cfg.model,
+    };
 
-    if (!cfg || (!cfg.apiKey && cfg.providerId !== 'ollama' && !cfg.baseUrl.includes('localhost'))) {
-      if (confirm('尚未配置大模型 API Key！是否现在打开 AI 配置面板？')) {
+    const isServerHosted =
+      (engine.providerId === 'vertex-gemini' && serverKeys.vertex) ||
+      (engine.providerId === 'anubis-gateway' && serverKeys.anubis);
+    const isLocalModel = engine.providerId === 'ollama' || (engine.baseUrl || '').includes('localhost') || (engine.baseUrl || '').includes('127.0.0.1');
+
+    if (!engine.apiKey && !isServerHosted && !isLocalModel) {
+      if (confirm('当前伴学引擎未配置 API Key，也未命中服务端托管密钥，是否现在打开 AI 配置面板？')) {
         onOpenAISettings();
       }
       return;
@@ -142,7 +171,7 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
     }
     systemContent += `\n\n【当前学习上下文】\n- 路线/技能树：《${project.name}》\n- 当前攻坚节点：【${task.title}】\n- 状态：${task.status}`;
     if (task.description) {
-      systemContent += `\n- 节点大纲与核心逻辑：\n${task.description.slice(0, 1500)}`;
+      systemContent += `\n- 节点讲义与核心逻辑：\n${task.description.slice(0, 6000)}`;
     }
     if (taskAnnotations.length > 0) {
       systemContent += `\n- 学员在课件中做的重点批注与思考：\n${taskAnnotations.map((a, i) => `${i + 1}. [重点词句: "${a.selectedText}"] 疑问/心得: "${a.comment}"`).join('\n')}`;
@@ -153,13 +182,17 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
       ...newMessages.map(m => ({ role: m.role, content: m.content })),
     ];
 
-    const engine = cfg.mentorEngine || cfg;
-
     try {
+      const token = localStorage.getItem('roadmap_auth_token');
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
+          projectId: project.id,
+          taskId: task.id,
           provider: engine.providerId,
           baseUrl: engine.baseUrl,
           apiKey: engine.apiKey,
@@ -237,18 +270,15 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
     }
   };
 
-  const currentProviderBadge = activeSettings ? (
-    <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
-      {activeSettings.providerId} · {activeSettings.model}
-    </span>
-  ) : (
-    <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30">
-      未设置 AI 密钥
+  const activeMentor = activeSettings.mentorEngine || activeSettings;
+  const currentProviderBadge = (
+    <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 truncate max-w-[165px]">
+      {activeMentor.model || activeMentor.providerId}
     </span>
   );
 
   return (
-    <div className="flex flex-col h-[580px] bg-zinc-950/70 rounded-2xl border border-zinc-800 overflow-hidden shadow-2xl">
+    <div className="flex flex-col h-full min-h-[460px] bg-zinc-950/70 rounded-2xl border border-zinc-800 overflow-hidden shadow-2xl">
       {/* Top Bar */}
       <div className="px-4 py-3 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-2.5">

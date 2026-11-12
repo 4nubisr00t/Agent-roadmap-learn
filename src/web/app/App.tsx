@@ -7,7 +7,7 @@ import TagSelector from './components/TagSelector.js';
 import DependencyViewsPanel from './components/DependencyViewsPanel.js';
 import TagManagerModal from './components/modals/TagManagerModal.js';
 import { AuthModal } from './components/modals/AuthModal.js';
-import { AISettingsModal } from './components/modals/AISettingsModal.js';
+import { AISettingsModal, AISettingsState, loadMergedAISettings, normalizeSavedSettings } from './components/modals/AISettingsModal.js';
 import { DocumentManagerModal } from './components/modals/DocumentManagerModal.js';
 import { AIRoadmapGeneratorModal } from './components/modals/AIRoadmapGeneratorModal.js';
 import { TaskAIChat } from './components/TaskAIChat.js';
@@ -162,11 +162,20 @@ const App: React.FC = () => {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [modalActiveTab, setModalActiveTab] = useState<'courseware' | 'notes' | 'gemini' | 'annotations'>('courseware');
+  const [leftPaneTab, setLeftPaneTab] = useState<'courseware' | 'notes'>('courseware');
+  const [rightPaneTab, setRightPaneTab] = useState<'gemini' | 'annotations'>('gemini');
+  const [isDesktopSplit, setIsDesktopSplit] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
+  );
+  const [aiSettings, setAiSettings] = useState<AISettingsState>(() => loadMergedAISettings());
+  const [streamingLectureText, setStreamingLectureText] = useState('');
+  const [quizAnswerDraft, setQuizAnswerDraft] = useState('');
+  const [chatTrigger, setChatTrigger] = useState<{ id: number; prompt: string } | null>(null);
   const [annotations, setAnnotations] = useState<AnnotationItem[]>([]);
   const [selectedHighlight, setSelectedHighlight] = useState<{ text: string; x: number; y: number } | null>(null);
   const [isAnnotationModalOpen, setIsAnnotationModalOpen] = useState(false);
   const [annotationComment, setAnnotationComment] = useState('');
-  const [annotationIntent, setAnnotationIntent] = useState<'explain' | 'example' | 'doubt' | 'quiz'>('explain');
+  const [annotationIntent, setAnnotationIntent] = useState<'explain' | 'example' | 'doubt' | 'quiz' | 'simplify'>('explain');
   const [isAnsweringAnnotation, setIsAnsweringAnnotation] = useState(false);
   const [isEnrichingTask, setIsEnrichingTask] = useState(false);
   const [enrichStatusText, setEnrichStatusText] = useState('');
@@ -201,13 +210,51 @@ const App: React.FC = () => {
   const noteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const autoSaveDebounceRef = useRef<any>(null);
 
+  const selectModalView = (tab: 'courseware' | 'notes' | 'gemini' | 'annotations') => {
+    setModalActiveTab(tab);
+    if (tab === 'courseware' || tab === 'notes') {
+      setLeftPaneTab(tab);
+    } else {
+      setRightPaneTab(tab);
+    }
+  };
+
   useEffect(() => {
-    if (isEditModalOpen && (modalActiveTab === 'courseware' || modalActiveTab === 'annotations')) {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onChange = () => setIsDesktopSplit(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  useEffect(() => {
+    setAiSettings(loadMergedAISettings(currentUser?.id));
+    fetch('/api/ai/config')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.success && data.data?.config) {
+          const userKey = currentUser?.id ? `roadmap_ai_config_${currentUser.id}` : 'roadmap_ai_config';
+          if (!localStorage.getItem(userKey) && !localStorage.getItem('roadmap_ai_config')) {
+            setAiSettings(normalizeSavedSettings(data.data.config));
+          }
+        }
+      })
+      .catch(() => {});
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (
+      isEditModalOpen &&
+      (modalActiveTab === 'courseware' ||
+        modalActiveTab === 'annotations' ||
+        (isDesktopSplit && (leftPaneTab === 'courseware' || rightPaneTab === 'annotations')))
+    ) {
       setTimeout(() => {
         triggerMermaidRender();
       }, 100);
     }
-  }, [isEditModalOpen, modalActiveTab, editingTask?.description]);
+  }, [isEditModalOpen, modalActiveTab, leftPaneTab, rightPaneTab, isDesktopSplit, editingTask?.description]);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [taskFormError, setTaskFormError] = useState('');
   const [newTaskForm, setNewTaskForm] = useState({
@@ -588,7 +635,20 @@ const App: React.FC = () => {
 
   const handleEditTask = (task: Task) => {
     setEditingTask(task);
+    setSelectedHighlight(null);
+    setStreamingLectureText('');
+    setQuizAnswerDraft('');
+    setNoteAutoSaveState('idle');
     setIsEditModalOpen(true);
+  };
+
+  const handleSwitchEditingTask = (nextTask: Task) => {
+    setEditingTask(nextTask);
+    setSelectedHighlight(null);
+    setStreamingLectureText('');
+    setQuizAnswerDraft('');
+    setNoteAutoSaveState('idle');
+    selectModalView('courseware');
   };
 
   const handleSaveTask = async () => {
@@ -809,83 +869,161 @@ const App: React.FC = () => {
     }, 1200);
   };
 
-  // AI Read Materials & Enrich Task
-  const handleEnrichTaskWithAI = async () => {
-    if (!editingTask || !selectedProject) return;
+  // Shared SSE consumer for /api/ai/enrich-task and /api/ai/explain-annotation
+  const readAISseStream = async (
+    res: Response,
+    onDelta: (accumulated: string, delta: string) => void,
+    onDone?: (payload: any) => void
+  ): Promise<string> => {
+    if (!res.body) return '';
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let accumulated = '';
+    let finalDonePayload: any = null;
 
-    let aiConfig: any = null;
-    try {
-      const saved = localStorage.getItem('roadmap_ai_config');
-      if (saved) aiConfig = JSON.parse(saved);
-    } catch {}
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const dataStr = trimmed.slice(5).trim();
+        if (!dataStr || dataStr === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(dataStr);
+          if (parsed.type === 'error') {
+            throw new Error(parsed.message || 'AI 流式响应异常');
+          } else if (parsed.type === 'delta' && parsed.content) {
+            accumulated += parsed.content;
+            onDelta(accumulated, parsed.content);
+          } else if (parsed.type === 'done') {
+            finalDonePayload = parsed;
+            if (onDone) onDone(parsed);
+          }
+        } catch (e: any) {
+          if (e?.message && !e.message.includes('JSON')) {
+            throw e;
+          }
+        }
+      }
+    }
+    return finalDonePayload?.description || finalDonePayload?.reply || accumulated;
+  };
+
+  // AI Read Materials & Enrich Task (Streaming SSE)
+  const handleEnrichTaskWithAI = async () => {
+    if (!editingTask) return;
+    const projId = tasks.find(t => t.task.id === editingTask.id)?.project.id || selectedProject;
+    if (!projId) return;
+
+    const cfg = loadMergedAISettings(currentUser?.id);
+    const mentor = cfg.mentorEngine || cfg;
 
     setIsEnrichingTask(true);
-    setEnrichStatusText('Gemini 3.8 Flash 导师正在调阅教材原书，为你生成生动透彻的专属伴学讲义...');
+    setStreamingLectureText('');
+    setEnrichStatusText(`${mentor.model || 'Gemini 3.8 Flash'} 导师正在研读教材并实时撰写讲义...`);
+    selectModalView('courseware');
 
     try {
       const res = await fetch('/api/ai/enrich-task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projectId: selectedProject,
+          projectId: projId,
           taskId: editingTask.id,
-          provider: aiConfig?.mentorEngine?.providerId || aiConfig?.providerId,
-          baseUrl: aiConfig?.mentorEngine?.baseUrl || aiConfig?.baseUrl,
-          apiKey: aiConfig?.mentorEngine?.apiKey || aiConfig?.apiKey,
-          model: aiConfig?.mentorEngine?.model || aiConfig?.model,
+          provider: mentor.providerId,
+          baseUrl: mentor.baseUrl,
+          apiKey: mentor.apiKey,
+          model: mentor.model,
+          stream: true,
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'AI 研读资料填充失败');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `AI 研读资料填充失败 (HTTP ${res.status})`);
       }
 
-      const updatedTask = data.task || { ...editingTask, description: data.description, status: 'in-progress' };
+      let serverDoneTask: Task | null = null;
+      const finalText = await readAISseStream(
+        res,
+        (accumulated) => {
+          setStreamingLectureText(accumulated);
+        },
+        (donePayload) => {
+          if (donePayload?.task) {
+            serverDoneTask = donePayload.task;
+          }
+        }
+      );
+
+      const updatedTask: Task = serverDoneTask || {
+        ...editingTask,
+        description: finalText || editingTask.description,
+        status: editingTask.status === 'todo' ? 'in-progress' : editingTask.status,
+      };
       setEditingTask(updatedTask);
       setTasks(prev => prev.map(item => item.task.id === updatedTask.id ? { ...item, task: updatedTask } : item));
-      setModalActiveTab('courseware');
+      setStreamingLectureText('');
     } catch (err: any) {
       alert(err.message || 'AI 填充失败，请检查网络或配置');
     } finally {
       setIsEnrichingTask(false);
       setEnrichStatusText('');
+      setStreamingLectureText('');
     }
   };
 
-  // Immediate Reactive AI Annotation Handler
-  const handleSaveAnnotation = async (customComment?: string, customIntent?: 'explain' | 'example' | 'doubt' | 'quiz') => {
+  // Immediate Reactive AI Annotation Handler (In-place streaming into right copilot)
+  const handleSaveAnnotation = async (
+    customComment?: string,
+    customIntent?: 'explain' | 'example' | 'doubt' | 'quiz' | 'simplify'
+  ) => {
     if (!selectedHighlight || !editingTask) return;
     const finalComment = (customComment !== undefined ? customComment : annotationComment).trim();
     const finalIntent = customIntent || annotationIntent;
     const highlightText = selectedHighlight.text;
+    const projId = tasks.find(t => t.task.id === editingTask.id)?.project.id || selectedProject;
 
-    let aiConfig: any = null;
-    try {
-      const saved = localStorage.getItem('roadmap_ai_config');
-      if (saved) aiConfig = JSON.parse(saved);
-    } catch {}
+    const cfg = loadMergedAISettings(currentUser?.id);
+    const mentor = cfg.mentorEngine || cfg;
+
+    const intentLabel =
+      finalIntent === 'example'
+        ? '请提供实操代码例题与分步演示'
+        : finalIntent === 'simplify'
+          ? '请用通俗生活大白话重讲这段概念'
+          : '请深入剖析核心含义与底层原理';
 
     setIsAnsweringAnnotation(true);
     setIsAnnotationModalOpen(false);
     setSelectedHighlight(null);
-    setModalActiveTab('annotations');
 
-    // Create temporary optimistic annotation
+    // Keep desktop courseware visible on left; stream answer in right copilot annotations tab
+    if (isDesktopSplit) {
+      setRightPaneTab('annotations');
+    } else {
+      setModalActiveTab('annotations');
+    }
+
     const tempId = 'ann_' + Date.now();
     const optimisticAnn: AnnotationItem = {
       id: tempId,
       taskId: editingTask.id,
       taskTitle: editingTask.title,
       selectedText: highlightText,
-      comment: finalComment || (finalIntent === 'example' ? '请提供实战代码案例' : '请深入剖析核心含义与原理'),
+      comment: finalComment || intentLabel,
+      aiResponse: '',
       aiStatus: 'generating',
       createdAt: new Date().toLocaleTimeString('zh-CN'),
     };
     setAnnotations(prev => [optimisticAnn, ...prev]);
 
     try {
-      // 1. Immediately request AI explanation
       const explainRes = await fetch('/api/ai/explain-annotation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -893,21 +1031,32 @@ const App: React.FC = () => {
           selectedText: highlightText,
           comment: finalComment,
           taskTitle: editingTask.title,
-          contextText: editingTask.description?.slice(0, 1500) || '',
+          contextText: editingTask.description?.slice(0, 2000) || '',
           intent: finalIntent,
-          projectId: selectedProject,
+          projectId: projId,
           taskId: editingTask.id,
-          provider: aiConfig?.mentorEngine?.providerId || aiConfig?.providerId,
-          baseUrl: aiConfig?.mentorEngine?.baseUrl || aiConfig?.baseUrl,
-          apiKey: aiConfig?.mentorEngine?.apiKey || aiConfig?.apiKey,
-          model: aiConfig?.mentorEngine?.model || aiConfig?.model,
+          provider: mentor.providerId,
+          baseUrl: mentor.baseUrl,
+          apiKey: mentor.apiKey,
+          model: mentor.model,
+          stream: true,
         }),
       });
 
-      const explainData = await explainRes.json();
-      const aiReply = explainData.reply || (explainRes.ok ? 'AI 导师已解析' : 'AI 响应超时，请重试');
+      if (!explainRes.ok) {
+        const errJson = await explainRes.json().catch(() => ({}));
+        throw new Error(errJson.error || `HTTP ${explainRes.status}`);
+      }
 
-      // 2. Persist annotation with AI reply to server
+      const aiReply = await readAISseStream(explainRes, (accumulated) => {
+        setAnnotations(prev =>
+          prev.map(a => (a.id === tempId ? { ...a, aiResponse: accumulated, aiStatus: 'generating' } : a))
+        );
+      });
+
+      const finalReply = aiReply || 'AI 导师已解析完成';
+
+      // Persist annotation with AI reply to server
       const saveRes = await fetch('/api/annotations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -915,8 +1064,8 @@ const App: React.FC = () => {
           taskId: editingTask.id,
           taskTitle: editingTask.title,
           selectedText: highlightText,
-          comment: finalComment || (finalIntent === 'example' ? '请提供实战代码案例' : '请深入剖析核心含义与原理'),
-          aiResponse: aiReply,
+          comment: finalComment || intentLabel,
+          aiResponse: finalReply,
           aiStatus: 'answered',
         }),
       });
@@ -927,7 +1076,7 @@ const App: React.FC = () => {
           setAnnotations(prev => prev.map(a => a.id === tempId ? savedData.data : a));
         }
       } else {
-        setAnnotations(prev => prev.map(a => a.id === tempId ? { ...a, aiResponse: aiReply, aiStatus: 'answered' } : a));
+        setAnnotations(prev => prev.map(a => a.id === tempId ? { ...a, aiResponse: finalReply, aiStatus: 'answered' } : a));
       }
     } catch (err: any) {
       console.error('Failed to get AI annotation reply:', err);
@@ -939,16 +1088,14 @@ const App: React.FC = () => {
     }
   };
 
-  // Re-run AI explanation for an existing annotation
+  // Re-run AI explanation for an existing annotation (streaming)
   const handleExplainExistingAnnotation = async (ann: AnnotationItem) => {
     if (!editingTask) return;
-    let aiConfig: any = null;
-    try {
-      const saved = localStorage.getItem('roadmap_ai_config');
-      if (saved) aiConfig = JSON.parse(saved);
-    } catch {}
+    const cfg = loadMergedAISettings(currentUser?.id);
+    const mentor = cfg.mentorEngine || cfg;
+    const projId = tasks.find(t => t.task.id === editingTask.id)?.project.id || selectedProject;
 
-    setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, aiStatus: 'generating' } : a));
+    setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, aiStatus: 'generating', aiResponse: '' } : a));
 
     try {
       const res = await fetch('/api/ai/explain-annotation', {
@@ -958,17 +1105,24 @@ const App: React.FC = () => {
           selectedText: ann.selectedText,
           comment: ann.comment,
           taskTitle: editingTask.title,
-          contextText: editingTask.description?.slice(0, 1500) || '',
-          projectId: selectedProject,
+          contextText: editingTask.description?.slice(0, 2000) || '',
+          projectId: projId,
           taskId: editingTask.id,
-          provider: aiConfig?.mentorEngine?.providerId || aiConfig?.providerId,
-          baseUrl: aiConfig?.mentorEngine?.baseUrl || aiConfig?.baseUrl,
-          apiKey: aiConfig?.mentorEngine?.apiKey || aiConfig?.apiKey,
-          model: aiConfig?.mentorEngine?.model || aiConfig?.model,
+          provider: mentor.providerId,
+          baseUrl: mentor.baseUrl,
+          apiKey: mentor.apiKey,
+          model: mentor.model,
+          stream: true,
         }),
       });
-      const data = await res.json();
-      const reply = data.reply || 'AI 未返回内容';
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'AI 解答失败');
+      }
+
+      const reply = (await readAISseStream(res, (accumulated) => {
+        setAnnotations(prev => prev.map(a => (a.id === ann.id ? { ...a, aiResponse: accumulated } : a)));
+      })) || 'AI 未返回内容';
 
       await fetch(`/api/annotations/${ann.id}`, {
         method: 'PUT',
@@ -982,31 +1136,77 @@ const App: React.FC = () => {
     }
   };
 
-  // Append AI annotation explanation directly into task notes
-  const handleAppendAnnotationToNotes = async (ann: AnnotationItem) => {
-    if (!editingTask || !selectedProject || !ann.aiResponse) return;
-    const formattedAi = ann.aiResponse.split('\n').join('\n> ');
-    const appendBlock = `\n\n> [!TIP] 重点批注与导师解答\n> **📌 划词原文**：${ann.selectedText}\n> **💬 学员提问**：${ann.comment}\n>\n> ${formattedAi}\n`;
-    const newDescription = (editingTask.description || '') + appendBlock;
-
+  // Persist new description helper shared by inline & append annotation insertion
+  const persistLectureDescriptionUpdate = async (newDescription: string, toastMessage: string) => {
+    if (!editingTask) return;
+    const projId = tasks.find(t => t.task.id === editingTask.id)?.project.id || selectedProject;
+    if (!projId) return;
     try {
       const res = await fetch('/api/tasks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projectId: selectedProject,
+          projectId: projId,
           taskId: editingTask.id,
           description: newDescription,
         }),
       });
       if (res.ok) {
-        setEditingTask(prev => prev ? { ...prev, description: newDescription } : prev);
-        setTasks(prev => prev.map(item => item.task.id === editingTask.id ? { ...item, task: { ...item.task, description: newDescription } } : item));
-        handleSyncTaskToObsidian({ ...editingTask, description: newDescription }, true);
-        alert('已成功将导师解答写入本模块讲义笔记并同步至 Obsidian！');
+        const updated = { ...editingTask, description: newDescription };
+        setEditingTask(updated);
+        setTasks(prev => prev.map(item => item.task.id === editingTask.id ? { ...item, task: updated } : item));
+        handleSyncTaskToObsidian(updated, true);
+        setVaultSyncMessage(toastMessage);
+        setTimeout(() => setVaultSyncMessage(null), 4000);
       }
-    } catch (e) {
-      alert('写入笔记失败，请重试');
+    } catch {
+      alert('写入讲义笔记失败，请重试');
+    }
+  };
+
+  // Insert annotation explanation right beneath the matched paragraph in lecture markdown
+  const handleInsertAnnotationInline = async (ann: AnnotationItem) => {
+    if (!editingTask || !ann.aiResponse) return;
+    const formattedAi = ann.aiResponse.split('\n').join('\n> ');
+    const calloutBlock = `\n\n> [!TIP] 💡 随堂划词批注：${ann.comment}\n> **📌 针对原文**：「${ann.selectedText.slice(0, 120)}${ann.selectedText.length > 120 ? '...' : ''}」\n>\n> ${formattedAi}\n`;
+
+    const desc = editingTask.description || '';
+    const snippetKey = ann.selectedText.trim().split(/\s+/)[0] || ann.selectedText.trim().slice(0, 20);
+    const exactIdx = desc.indexOf(ann.selectedText.trim().slice(0, 28));
+    const fallbackIdx = exactIdx >= 0 ? exactIdx : (snippetKey.length >= 4 ? desc.indexOf(snippetKey) : -1);
+
+    let newDescription = desc + calloutBlock;
+    let toast = '已追加导师批注卡片到讲义末尾并同步至 Obsidian！';
+    if (fallbackIdx >= 0) {
+      const nextParaBreak = desc.indexOf('\n\n', fallbackIdx);
+      const nextLineBreak = desc.indexOf('\n', fallbackIdx);
+      const insertPos = nextParaBreak >= 0 ? nextParaBreak : (nextLineBreak >= 0 ? nextLineBreak : desc.length);
+      newDescription = desc.slice(0, insertPos) + calloutBlock + desc.slice(insertPos);
+      toast = '✨ 已原位嵌入到对应讲义段落下方，并同步至 Obsidian！';
+    }
+    await persistLectureDescriptionUpdate(newDescription, toast);
+  };
+
+  // Append AI annotation explanation directly to end of task notes
+  const handleAppendAnnotationToNotes = async (ann: AnnotationItem) => {
+    if (!editingTask || !ann.aiResponse) return;
+    const formattedAi = ann.aiResponse.split('\n').join('\n> ');
+    const appendBlock = `\n\n> [!TIP] 重点批注与导师解答\n> **📌 划词原文**：${ann.selectedText}\n> **💬 学员提问**：${ann.comment}\n>\n> ${formattedAi}\n`;
+    await persistLectureDescriptionUpdate(
+      (editingTask.description || '') + appendBlock,
+      '已将导师解答写入本节笔记并同步至 Obsidian！'
+    );
+  };
+
+  const handleSubmitQuizToMentor = () => {
+    if (!editingTask || !quizAnswerDraft.trim()) return;
+    const prompt = `我完成了本节点【${editingTask.title}】课后自测挑战，请结合讲义中的自测题帮我严格批改、指出我思考里的盲区，并判断我是否已经具备点亮本节（进入下一节）的掌握度：\n\n【我的解题思路与作答】：\n${quizAnswerDraft.trim()}`;
+    setChatTrigger({ id: Date.now(), prompt });
+    setQuizAnswerDraft('');
+    if (isDesktopSplit) {
+      setRightPaneTab('gemini');
+    } else {
+      setModalActiveTab('gemini');
     }
   };
 
@@ -2058,11 +2258,18 @@ const App: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsAISettingsOpen(true)}
-            title="配置大模型供应商与 API Key"
-            className="px-3.5 py-1.5 text-xs font-bold bg-zinc-900/90 hover:bg-zinc-850 text-zinc-300 border border-zinc-800 hover:border-zinc-700 rounded-xl shadow-sm transition-all flex items-center gap-1.5 active:scale-95"
+            title="点击切换或配置双 AI 引擎（建树拆书引擎 / 伴学精讲引擎）"
+            className="px-3 py-1.5 text-xs font-bold bg-zinc-900/95 hover:bg-zinc-850 text-zinc-200 border border-zinc-800 hover:border-amber-500/50 rounded-xl shadow-sm transition-all flex items-center gap-2 active:scale-95"
           >
-            <IconSettings className="w-3.5 h-3.5 text-amber-400" />
-            <span>AI 配置</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+            <span className="hidden xl:inline font-mono text-[11px] text-zinc-400">
+              ⚡ {(aiSettings.buildEngine?.model || 'deepseek-v4.1-flash').replace('deepseek-', 'ds-')}
+            </span>
+            <span className="hidden xl:inline text-zinc-700">|</span>
+            <span className="font-mono text-[11px] text-amber-300">
+              💎 {aiSettings.mentorEngine?.model || aiSettings.model || 'gemini-3.8-flash'}
+            </span>
+            <IconSettings className="w-3.5 h-3.5 text-amber-400/90" />
           </button>
           <button
             type="button"
@@ -2471,7 +2678,7 @@ const App: React.FC = () => {
               onSelectTask={(taskId) => {
                 const item = tasks.find(t => t.task.id === taskId);
                 if (item) {
-                  setModalActiveTab('courseware');
+                  selectModalView('courseware');
                   handleEditTask(item.task);
                 }
               }}
@@ -2496,9 +2703,33 @@ const App: React.FC = () => {
         </main>
       </div>
 
-      {isEditModalOpen && editingTask && (
+      {isEditModalOpen && editingTask && (() => {
+        const currentProjId = tasks.find(t => t.task.id === editingTask.id)?.project.id || selectedProject;
+        const currentProjectTasks = tasks
+          .filter(item => !currentProjId || item.project.id === currentProjId)
+          .map(item => item.task);
+        const currentTaskIdx = currentProjectTasks.findIndex(t => t.id === editingTask.id);
+        const prevTask = currentTaskIdx > 0 ? currentProjectTasks[currentTaskIdx - 1] : null;
+        const nextTask = currentTaskIdx >= 0 && currentTaskIdx < currentProjectTasks.length - 1
+          ? currentProjectTasks[currentTaskIdx + 1]
+          : null;
+        const taskAnnotations = annotations.filter(a => a.taskId === editingTask.id);
+        const showLeftStage = isDesktopSplit || modalActiveTab === 'courseware' || modalActiveTab === 'notes';
+        const showRightCopilot = isDesktopSplit || modalActiveTab === 'gemini' || modalActiveTab === 'annotations';
+        const activeLeftTab = isDesktopSplit ? leftPaneTab : (modalActiveTab === 'notes' ? 'notes' : 'courseware');
+        const activeRightTab = isDesktopSplit ? rightPaneTab : (modalActiveTab === 'annotations' ? 'annotations' : 'gemini');
+        const activeLectureContent =
+          isEnrichingTask && streamingLectureText ? streamingLectureText : (editingTask.description || '');
+        const needsInitialLecture =
+          !isEnrichingTask &&
+          (!editingTask.description ||
+            editingTask.description.includes('💡 **Gemini 专属') ||
+            editingTask.description.includes('💡 **智能点亮') ||
+            editingTask.description.trim().length < 150);
+
+        return (
         <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-2 sm:p-4 animate-fadeIn"
+          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-1.5 sm:p-3 animate-fadeIn"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setIsEditModalOpen(false);
@@ -2506,42 +2737,81 @@ const App: React.FC = () => {
             }
           }}
         >
-          <div className="bg-zinc-900/95 sm:rounded-2xl shadow-2xl w-full max-w-4xl h-full sm:h-auto sm:max-h-[92vh] flex flex-col overflow-hidden animate-slideUp border border-zinc-700/80 text-zinc-100">
-            {/* Modal Header */}
-            <div className="p-3 sm:p-6 border-b border-zinc-800 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 sm:gap-4 bg-zinc-950/70">
+          <div className="bg-zinc-900/95 sm:rounded-2xl shadow-2xl w-full max-w-[98vw] xl:max-w-[1440px] h-[96vh] sm:h-[92vh] flex flex-col overflow-hidden animate-slideUp border border-zinc-700/80 text-zinc-100">
+            {/* Modal Header with Chapter Navigation */}
+            <div className="p-3 sm:px-5 sm:py-3.5 border-b border-zinc-800 flex flex-wrap lg:flex-nowrap items-center justify-between gap-2.5 bg-zinc-950/80">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${STATUS_CONFIG[editingTask.status]?.bgColor} ${STATUS_CONFIG[editingTask.status]?.color}`}>
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${STATUS_CONFIG[editingTask.status]?.bgColor} ${STATUS_CONFIG[editingTask.status]?.color}`}>
                     {STATUS_CONFIG[editingTask.status]?.label || editingTask.status}
                   </span>
                   <span className="text-[11px] font-bold text-zinc-400">
                     {PRIORITY_CONFIG[editingTask.priority]?.label || editingTask.priority}
                   </span>
+                  {currentProjectTasks.length > 1 && (
+                    <div className="flex items-center gap-1 ml-1 bg-zinc-900 border border-zinc-800 rounded-lg px-1 py-0.5">
+                      <button
+                        type="button"
+                        disabled={!prevTask}
+                        onClick={() => prevTask && handleSwitchEditingTask(prevTask)}
+                        className="px-1.5 py-0.5 text-[11px] font-bold text-zinc-300 hover:text-amber-300 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-0.5 transition-colors"
+                        title={prevTask ? `上一节：${prevTask.title}` : '已是第一节'}
+                      >
+                        <IconChevronLeft className="w-3 h-3" />
+                        <span className="hidden sm:inline">上一节</span>
+                      </button>
+                      <select
+                        value={editingTask.id}
+                        onChange={(e) => {
+                          const target = currentProjectTasks.find(t => t.id === e.target.value);
+                          if (target) handleSwitchEditingTask(target);
+                        }}
+                        className="bg-transparent text-[11px] font-bold text-amber-300 focus:outline-none max-w-[140px] sm:max-w-[200px] truncate cursor-pointer"
+                        title="快速切换本课程任意章节节点"
+                      >
+                        {currentProjectTasks.map((t, i) => (
+                          <option key={t.id} value={t.id} className="bg-zinc-900 text-zinc-200">
+                            {t.status === 'done' ? '✅' : t.status === 'in-progress' ? '⚡' : '⭕'} {i + 1}. {t.title}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!nextTask}
+                        onClick={() => nextTask && handleSwitchEditingTask(nextTask)}
+                        className="px-1.5 py-0.5 text-[11px] font-bold text-zinc-300 hover:text-amber-300 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-0.5 transition-colors"
+                        title={nextTask ? `下一节：${nextTask.title}` : '已是最后一节'}
+                      >
+                        <span className="hidden sm:inline">下一节</span>
+                        <IconChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <h2 className="text-base sm:text-xl font-black text-zinc-100 tracking-tight truncate">
+                <h2 className="text-base sm:text-lg font-black text-zinc-100 tracking-tight truncate">
                   {editingTask.title}
                 </h2>
               </div>
-              
+
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button
                   type="button"
                   onClick={handleEnrichTaskWithAI}
                   disabled={isEnrichingTask}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:brightness-105 text-zinc-950 rounded-xl text-xs font-black transition-all shadow-md shadow-amber-500/20 active:scale-95 disabled:opacity-50"
-                  title="由 AI 自动研读资料库教材并生成详细讲义与核心考点"
+                  title="由 AI 导师流式研读资料库教材并撰写深度讲义"
                 >
                   {isEnrichingTask ? (
                     <>
                       <span className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
-                      <span className="hidden sm:inline">{enrichStatusText || 'Gemini 导师研读撰写中...'}</span>
-                      <span className="sm:hidden">研读中...</span>
+                      <span className="hidden sm:inline">实时撰稿中...</span>
+                      <span className="sm:hidden">撰稿中...</span>
                     </>
                   ) : (
                     <>
                       <IconSparkles className="w-3.5 h-3.5 text-zinc-950" />
-                      <span className="hidden sm:inline">💎 Gemini 导师精讲点亮</span>
-                      <span className="sm:hidden">💎 Gemini精讲</span>
+                      <span className="hidden sm:inline">💎 Gemini 精讲点亮</span>
+                      <span className="sm:hidden">💎 精讲</span>
                     </>
                   )}
                 </button>
@@ -2549,7 +2819,7 @@ const App: React.FC = () => {
                   type="button"
                   onClick={() => handleExportSingleNote(editingTask)}
                   className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-zinc-850 text-amber-300 hover:text-amber-200 hover:bg-zinc-800 border border-amber-500/30 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95"
-                  title="导出本节讲义与笔记为本地文件"
+                  title="导出本节讲义与笔记为本地 Markdown 文件"
                 >
                   <IconUpload className="w-3.5 h-3.5 rotate-180" />
                   <span>导出笔记</span>
@@ -2567,299 +2837,279 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Navigation Tabs */}
-            <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-6 pt-2 sm:pt-3 pb-2 border-b border-zinc-800 bg-zinc-950/50 overflow-x-auto whitespace-nowrap">
-              <button
-                type="button"
-                onClick={() => setModalActiveTab('courseware')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 active:scale-95 ${
-                  modalActiveTab === 'courseware'
-                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-md font-black'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
-                }`}
-              >
-                <IconFileText className="w-3.5 h-3.5" />
-                <span>课程讲义</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setModalActiveTab('notes')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 active:scale-95 ${
-                  modalActiveTab === 'notes'
-                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-md font-black'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
-                }`}
-              >
-                <IconEdit className="w-3.5 h-3.5" />
-                <span>✍️ 实时笔记 / Markdown Studio</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setModalActiveTab('gemini')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 active:scale-95 ${
-                  modalActiveTab === 'gemini'
-                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-md font-black'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
-                }`}
-              >
-                <IconAI className="w-3.5 h-3.5" />
-                <span>AI 导师伴学</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setModalActiveTab('annotations')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 active:scale-95 ${
-                  modalActiveTab === 'annotations'
-                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-md font-black'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
-                }`}
-              >
-                <IconPin className="w-3.5 h-3.5" />
-                <span>划词批注疑问 ({annotations.filter(a => a.taskId === editingTask.id).length})</span>
-              </button>
-            </div>
+            {/* Mobile Single-Column Tab Bar */}
+            {!isDesktopSplit && (
+              <div className="flex items-center gap-1.5 px-3 pt-2 pb-2 border-b border-zinc-800 bg-zinc-950/50 overflow-x-auto whitespace-nowrap">
+                <button
+                  type="button"
+                  onClick={() => selectModalView('courseware')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                    modalActiveTab === 'courseware'
+                      ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                  }`}
+                >
+                  <IconFileText className="w-3.5 h-3.5" />
+                  <span>讲义研读</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => selectModalView('notes')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                    modalActiveTab === 'notes'
+                      ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                  }`}
+                >
+                  <IconEdit className="w-3.5 h-3.5" />
+                  <span>✍️ 实时笔记</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => selectModalView('gemini')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                    modalActiveTab === 'gemini'
+                      ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                  }`}
+                >
+                  <IconAI className="w-3.5 h-3.5" />
+                  <span>💎 伴学对话</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => selectModalView('annotations')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                    modalActiveTab === 'annotations'
+                      ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                  }`}
+                >
+                  <IconPin className="w-3.5 h-3.5" />
+                  <span>批注 ({taskAnnotations.length})</span>
+                </button>
+              </div>
+            )}
 
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto flex-1 min-h-0 bg-zinc-950/30 text-zinc-200">
-              {modalActiveTab === 'courseware' && (
-                <div className="relative">
-                  {/* Floating Reactive AI Toolbar for Highlighted Text */}
-                  {selectedHighlight && !isAnnotationModalOpen && (
-                    <div
-                      style={{
-                        position: 'fixed',
-                        left: `${selectedHighlight.x}px`,
-                        top: `${selectedHighlight.y}px`,
-                        transform: 'translate(-50%, -100%)',
-                        zIndex: 9999,
-                      }}
-                      className="pointer-events-auto flex items-center gap-1.5 p-1 bg-zinc-950/95 backdrop-blur-md rounded-2xl border border-amber-500/40 shadow-2xl animate-slideUp"
-                    >
-                      <button
-                        type="button"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleSaveAnnotation('', 'explain');
-                        }}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 hover:brightness-110 rounded-xl text-xs font-black shadow-md transition-all active:scale-95"
-                        title="无需打字，AI 立即深度解析该划选语句的核心原理与含义"
-                      >
-                        <IconLightning className="w-3.5 h-3.5 text-zinc-950" />
-                        <span>⚡ AI 即刻答疑</span>
-                      </button>
-                      <button
-                        type="button"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleSaveAnnotation('', 'example');
-                        }}
-                        className="flex items-center gap-1 px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-amber-300 rounded-xl text-xs font-bold border border-zinc-800 hover:border-amber-500/30 transition-all active:scale-95"
-                        title="AI 为此划选概念生成实操代码案例"
-                      >
-                        <IconSparkles className="w-3 h-3 text-amber-400" />
-                        <span>代码例题</span>
-                      </button>
-                      <button
-                        type="button"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setAnnotationIntent('doubt');
-                          setIsAnnotationModalOpen(true);
-                        }}
-                        className="flex items-center gap-1 px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-zinc-100 rounded-xl text-xs font-bold border border-zinc-800 transition-all active:scale-95"
-                        title="输入你的自定义疑问或心得，AI 立即作答"
-                      >
-                        <IconPin className="w-3 h-3 text-zinc-400" />
-                        <span>自定义提问</span>
-                      </button>
+            {/* Modal Split-Screen Cockpit Body */}
+            <div className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-12 gap-3 p-3 sm:p-4 overflow-hidden bg-zinc-950/35 text-zinc-200">
+              {/* LEFT STAGE: Courseware Reading & Live Markdown Studio */}
+              {showLeftStage && (
+                <div className="lg:col-span-7 flex flex-col min-h-0 flex-1 bg-zinc-900/45 rounded-2xl border border-zinc-800/80 overflow-hidden">
+                  {isDesktopSplit && (
+                    <div className="px-3.5 py-2 border-b border-zinc-800/80 bg-zinc-950/60 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => selectModalView('courseware')}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 active:scale-95 ${
+                            activeLeftTab === 'courseware'
+                              ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-sm font-black'
+                              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                          }`}
+                        >
+                          <IconFileText className="w-3.5 h-3.5" />
+                          <span>📖 讲义研读</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => selectModalView('notes')}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 active:scale-95 ${
+                            activeLeftTab === 'notes'
+                              ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-sm font-black'
+                              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                          }`}
+                        >
+                          <IconEdit className="w-3.5 h-3.5" />
+                          <span>✍️ 实时笔记 / Obsidian Studio</span>
+                        </button>
+                      </div>
+                      <span className="text-[11px] text-zinc-500 hidden xl:inline">
+                        划选任意语句，右侧将流式生成导师释义
+                      </span>
                     </div>
                   )}
 
-                  {!editingTask.description || editingTask.description.includes('💡 **Gemini 专属') || editingTask.description.includes('💡 **智能点亮') || editingTask.description.trim().length < 150 ? (
-                    <div className="p-8 rounded-2xl bg-gradient-to-br from-amber-500/10 via-zinc-900 to-zinc-950 border border-amber-500/30 text-center space-y-4 my-4 shadow-xl">
-                      <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10">
-                        <IconSparkles className="w-6 h-6" />
-                      </div>
-                      <div className="space-y-1">
-                        <h3 className="text-base font-black text-zinc-100">该学习节点已就绪，等待唤醒 Gemini 导师精讲</h3>
-                        <p className="text-xs text-zinc-400 max-w-md mx-auto">
-                          按需解锁，拒绝无谓 Token 消耗！一键唤醒 Gemini 3.8 Flash 导师，结合本章教材原书正文，为你生成生动通透、极富人情味的沉浸式讲义（支持生活比喻、LaTeX公式推演与课后自测题）！
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleEnrichTaskWithAI}
-                        disabled={isEnrichingTask}
-                        className="px-6 py-2.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-zinc-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/20 active:scale-95 transition-all inline-flex items-center gap-2"
-                      >
-                        {isEnrichingTask ? (
-                          <>
-                            <span className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
-                            <span>{enrichStatusText || 'Gemini 3.8 Flash 导师正在研读教材并撰写讲义...'}</span>
-                          </>
-                        ) : (
-                          <>
-                            <IconLightning className="w-4 h-4 text-zinc-950" />
-                            <span>💎 唤醒 Gemini 3.8 Flash 导师深度精讲</span>
-                          </>
+                  <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5">
+                    {activeLeftTab === 'courseware' && (
+                      <div className="relative">
+                        {/* Floating Reactive AI Toolbar for Highlighted Text */}
+                        {selectedHighlight && !isAnnotationModalOpen && (
+                          <div
+                            style={{
+                              position: 'fixed',
+                              left: `${selectedHighlight.x}px`,
+                              top: `${selectedHighlight.y}px`,
+                              transform: 'translate(-50%, -100%)',
+                              zIndex: 9999,
+                            }}
+                            className="pointer-events-auto flex flex-wrap items-center gap-1 p-1.5 bg-zinc-950/95 backdrop-blur-md rounded-2xl border border-amber-500/45 shadow-2xl animate-slideUp"
+                          >
+                            <button
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleSaveAnnotation('', 'explain');
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 hover:brightness-110 rounded-xl text-xs font-black shadow-md transition-all active:scale-95"
+                              title="不打断阅读，在右侧即时流式剖析该词句的底层原理"
+                            >
+                              <IconLightning className="w-3.5 h-3.5 text-zinc-950" />
+                              <span>⚡ 即刻释义</span>
+                            </button>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleSaveAnnotation('', 'simplify');
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-emerald-300 rounded-xl text-xs font-bold border border-zinc-800 hover:border-emerald-500/40 transition-all active:scale-95"
+                              title="抛开晦涩术语，用生活大白话/形象比喻重新讲一遍"
+                            >
+                              <span>🗣️ 大白话重讲</span>
+                            </button>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleSaveAnnotation('', 'example');
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-amber-300 rounded-xl text-xs font-bold border border-zinc-800 hover:border-amber-500/30 transition-all active:scale-95"
+                              title="为该概念生成可动手实操的代码或指令例题"
+                            >
+                              <IconSparkles className="w-3 h-3 text-amber-400" />
+                              <span>💻 代码例题</span>
+                            </button>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setAnnotationIntent('doubt');
+                                setIsAnnotationModalOpen(true);
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-zinc-100 rounded-xl text-xs font-bold border border-zinc-800 transition-all active:scale-95"
+                              title="输入你的自定义疑问或笔记批注"
+                            >
+                              <IconPin className="w-3 h-3 text-zinc-400" />
+                              <span>自定义提问</span>
+                            </button>
+                          </div>
                         )}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center justify-between pb-2 border-b border-zinc-800/60 gap-2">
-                        <span className="text-[11px] text-zinc-400 flex items-center gap-1.5 font-medium">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                          <span>提示：鼠标在讲义中划选任何词句，AI 导师将即刻弹出解答</span>
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setModalActiveTab('notes')}
-                            className="text-[11px] font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1 rounded-lg flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
-                            title="切换到即时笔记编辑工作室，随心写笔记与推导公式"
-                          >
-                            <IconEdit className="w-3 h-3 text-amber-400" />
-                            <span>✍️ 随时做笔记 / 深度编辑</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleEnrichTaskWithAI}
-                            disabled={isEnrichingTask}
-                            className="text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1 rounded-lg flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
-                            title="重新调用 AI 研读资料库并扩充讲义"
-                          >
-                            <IconSparkles className="w-3 h-3" />
-                            <span>{isEnrichingTask ? 'AI 扩充撰写中...' : 'AI 研读资料扩充讲义'}</span>
-                          </button>
-                        </div>
-                      </div>
-                      <div
-                        onMouseUp={handleCoursewareMouseUp}
-                        className="courseware-content max-w-none text-zinc-200 leading-relaxed select-text cursor-text"
-                        dangerouslySetInnerHTML={{ __html: renderMarkdown(editingTask.description) }}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
 
-              {modalActiveTab === 'annotations' && (
-                <div className="space-y-4">
-                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-4">
-                    <div>
-                      <h3 className="text-sm font-black text-amber-300 flex items-center gap-2">
-                        <IconPin className="w-4 h-4 text-amber-400" />
-                        <span>划词批注与 AI 即时答疑</span>
-                      </h3>
-                      <p className="text-xs text-amber-200/80 mt-1">
-                        在课程讲义中划选任何词句，AI 导师均已在此生成专属深度解答。支持一键采纳写入讲义笔记！
-                      </p>
-                    </div>
-                  </div>
-
-                  {annotations.filter(a => a.taskId === editingTask.id).length === 0 ? (
-                    <div className="text-center py-12 text-zinc-500">
-                      <IconPin className="w-10 h-10 text-zinc-600 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm font-medium text-zinc-400">当前模块暂无批注与答疑记录</p>
-                      <p className="text-xs text-zinc-500 mt-1">回到「课程讲义」选项卡，划选任何不懂的句子，点击「⚡ AI 即刻答疑」即可秒级生成解答！</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {annotations.filter(a => a.taskId === editingTask.id).map((ann, idx) => (
-                        <div key={ann.id} className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/90 hover:border-amber-500/40 transition-all shadow-sm space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-black text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
-                              <IconPin className="w-3 h-3 text-amber-400" />
-                              <span>划词答疑 #{idx + 1}</span>
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11px] text-zinc-500">{ann.createdAt}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteAnnotation(ann.id)}
-                                className="text-xs text-zinc-500 hover:text-rose-400 font-bold px-2 py-0.5 rounded hover:bg-zinc-800 flex items-center gap-1 transition-colors active:scale-95"
-                                title="删除此条批注"
-                              >
-                                <IconTrash className="w-3 h-3" />
-                                <span>删除</span>
-                              </button>
-                            </div>
+                        {isEnrichingTask && (
+                          <div className="mb-3 px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/35 flex items-center gap-2.5 text-xs text-amber-300 font-bold">
+                            <span className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                            <span>{enrichStatusText || '导师正在结合教材流式撰写深度讲义...'}</span>
                           </div>
+                        )}
 
-                          {/* Highlight Text */}
-                          <div className="p-3 bg-zinc-950 border-l-4 border-amber-400 rounded-r-lg text-xs font-mono text-amber-100/90 leading-relaxed">
-                            “{ann.selectedText}”
-                          </div>
-
-                          {/* User Note */}
-                          {ann.comment && (
-                            <div className="text-xs font-bold text-zinc-300 flex items-start gap-2 bg-zinc-950/60 p-2.5 rounded-lg border border-zinc-800/80">
-                              <span className="text-amber-400 font-black flex-shrink-0">💬 学员疑问:</span>
-                              <span>{ann.comment}</span>
+                        {needsInitialLecture ? (
+                          <div className="p-8 rounded-2xl bg-gradient-to-br from-amber-500/10 via-zinc-900 to-zinc-950 border border-amber-500/30 text-center space-y-4 my-4 shadow-xl">
+                            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10">
+                              <IconSparkles className="w-6 h-6" />
                             </div>
-                          )}
+                            <div className="space-y-1">
+                              <h3 className="text-base font-black text-zinc-100">该学习节点已就绪，等待唤醒导师精讲</h3>
+                              <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                                按需解锁，拒绝无谓 Token 消耗！点击下方按钮，{aiSettings.mentorEngine?.model || 'Gemini 3.8 Flash'} 导师将读取本章原书切片并实时流式生成深度讲义与随堂自测。
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleEnrichTaskWithAI}
+                              disabled={isEnrichingTask}
+                              className="px-6 py-2.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-zinc-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/20 active:scale-95 transition-all inline-flex items-center gap-2"
+                            >
+                              <IconLightning className="w-4 h-4 text-zinc-950" />
+                              <span>💎 唤醒导师流式精讲点亮</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            <div className="flex flex-wrap items-center justify-between pb-2 border-b border-zinc-800/60 gap-2">
+                              <span className="text-[11px] text-zinc-400 flex items-center gap-1.5 font-medium">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                <span>划选任意语句即可在右侧流式解惑</span>
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => selectModalView('notes')}
+                                  className="text-[11px] font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all active:scale-95"
+                                >
+                                  <IconEdit className="w-3 h-3 text-amber-400" />
+                                  <span>编辑笔记</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleEnrichTaskWithAI}
+                                  disabled={isEnrichingTask}
+                                  className="text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all active:scale-95 disabled:opacity-50"
+                                >
+                                  <IconSparkles className="w-3 h-3" />
+                                  <span>{isEnrichingTask ? '撰稿中...' : '重新精讲扩展'}</span>
+                                </button>
+                              </div>
+                            </div>
 
-                          {/* AI Response Card */}
-                          {ann.aiResponse ? (
-                            <div className="p-3.5 bg-amber-500/5 rounded-xl border border-amber-500/25 text-xs text-zinc-200 leading-relaxed space-y-2">
-                              <div className="flex items-center justify-between border-b border-amber-500/20 pb-1.5">
-                                <div className="flex items-center gap-1.5 text-amber-400 font-black">
-                                  <IconSparkles className="w-3.5 h-3.5 text-amber-400" />
-                                  <span>AI 导师即时解答</span>
+                            <div
+                              onMouseUp={handleCoursewareMouseUp}
+                              className="courseware-content max-w-none text-zinc-200 leading-relaxed select-text cursor-text"
+                              dangerouslySetInnerHTML={{
+                                __html: renderMarkdown(activeLectureContent || '正在接收流式讲义内容...'),
+                              }}
+                            />
+
+                            {/* Interactive Quiz Check & Unlock Box */}
+                            {!isEnrichingTask && activeLectureContent.trim().length > 150 && (
+                              <div className="mt-6 p-4 rounded-2xl bg-gradient-to-br from-zinc-950/90 to-amber-950/15 border border-amber-500/30 space-y-3">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                                    <span>🎯 随堂自测过关提交</span>
+                                    <span className="text-[10px] font-normal text-zinc-400">写下你的思考结论，让右侧导师批改</span>
+                                  </div>
+                                  {nextTask && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleQuickSetStatus(editingTask.id, 'done');
+                                        handleSwitchEditingTask(nextTask);
+                                      }}
+                                      className="text-[11px] font-bold text-emerald-300 hover:text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1 rounded-lg transition-all active:scale-95"
+                                    >
+                                      ✅ 确认掌握并进下一节 →
+                                    </button>
+                                  )}
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <textarea
+                                  value={quizAnswerDraft}
+                                  onChange={(e) => setQuizAnswerDraft(e.target.value)}
+                                  rows={2}
+                                  placeholder="输入你对本节「闯关自测与思考挑战」的解答思路、推导结论或疑问..."
+                                  className="w-full px-3 py-2 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-amber-500/50 resize-y"
+                                />
+                                <div className="flex justify-end">
                                   <button
                                     type="button"
-                                    onClick={() => handleAppendAnnotationToNotes(ann)}
-                                    className="text-[11px] font-bold text-amber-300 hover:text-amber-200 flex items-center gap-1 px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all active:scale-95"
-                                    title="将导师这句解答直接写入讲义笔记"
+                                    disabled={!quizAnswerDraft.trim()}
+                                    onClick={handleSubmitQuizToMentor}
+                                    className="px-4 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black text-xs rounded-xl hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
                                   >
-                                    <IconCheck className="w-3 h-3 text-amber-400" />
-                                    <span>采纳写入笔记</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setModalActiveTab('gemini')}
-                                    className="text-[11px] font-bold text-zinc-300 hover:text-zinc-100 flex items-center gap-1 px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-all active:scale-95"
-                                    title="去 AI 导师伴学中进一步深入探讨"
-                                  >
-                                    <IconAI className="w-3 h-3 text-amber-400" />
-                                    <span>深度追问</span>
+                                    💎 提交给导师严格批改
                                   </button>
                                 </div>
                               </div>
-                              <div
-                                className="courseware-content max-w-none text-zinc-300 leading-relaxed select-text"
-                                dangerouslySetInnerHTML={{ __html: renderMarkdown(ann.aiResponse) }}
-                              />
-                            </div>
-                          ) : ann.aiStatus === 'generating' ? (
-                            <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/30 flex items-center gap-2.5 text-xs text-amber-300 font-bold">
-                              <span className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
-                              <span>AI 导师正在研读上下文并针对划词解答中...</span>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleExplainExistingAnnotation(ann)}
-                              className="w-full py-2 bg-zinc-850 hover:bg-zinc-800 text-amber-300 border border-amber-500/30 hover:border-amber-500/60 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95"
-                            >
-                              <IconLightning className="w-3.5 h-3.5 text-amber-400" />
-                              <span>呼叫 AI 立即解答该批注疑问</span>
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-              {modalActiveTab === 'notes' && (
+                    {activeLeftTab === 'notes' && (
                 <div className="space-y-3">
                   {/* Studio Status & Notification Toast */}
                   {vaultSyncMessage && (
@@ -3165,25 +3415,189 @@ const App: React.FC = () => {
                     )}
                   </div>
                 </div>
+                    )}
+                  </div>
+                </div>
               )}
 
-                            {modalActiveTab === 'gemini' && (
-                <div className="space-y-4">
-                  <TaskAIChat
-                    task={editingTask}
-                    project={projects.find(p => p.project.id === selectedProject)?.project || { id: selectedProject || '', name: '技能树路线' }}
-                    annotations={annotations}
-                    currentUserId={currentUser?.id}
-                    onOpenAISettings={() => setIsAISettingsOpen(true)}
-                  />
+              {/* RIGHT PERSISTENT COPILOT: Gemini Mentor Chat & Highlight Annotation Stream */}
+              {showRightCopilot && (
+                <div className="lg:col-span-5 flex flex-col min-h-0 flex-1 bg-zinc-900/45 rounded-2xl border border-zinc-800/80 overflow-hidden">
+                  {isDesktopSplit && (
+                    <div className="px-3.5 py-2 border-b border-zinc-800/80 bg-zinc-950/60 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => selectModalView('gemini')}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 active:scale-95 ${
+                            activeRightTab === 'gemini'
+                              ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-sm font-black'
+                              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                          }`}
+                        >
+                          <IconAI className="w-3.5 h-3.5" />
+                          <span>💎 Gemini 伴学</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => selectModalView('annotations')}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 active:scale-95 ${
+                            activeRightTab === 'annotations'
+                              ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-sm font-black'
+                              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                          }`}
+                        >
+                          <IconPin className="w-3.5 h-3.5" />
+                          <span>📌 划词批注 ({taskAnnotations.length})</span>
+                          {isAnsweringAnnotation && (
+                            <span className="w-2 h-2 rounded-full bg-amber-300 animate-ping" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
-                  
+                  <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-3.5 flex flex-col">
+                    {activeRightTab === 'gemini' && (
+                      <div className="flex-1 min-h-0 flex flex-col">
+                        <TaskAIChat
+                          task={editingTask}
+                          project={projects.find(p => p.project.id === currentProjId)?.project || { id: currentProjId || '', name: '技能树路线' }}
+                          annotations={annotations}
+                          currentUserId={currentUser?.id}
+                          onOpenAISettings={() => setIsAISettingsOpen(true)}
+                          externalTrigger={chatTrigger}
+                        />
+                      </div>
+                    )}
+
+                    {activeRightTab === 'annotations' && (
+                      <div className="space-y-3">
+                        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                          <h3 className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                            <IconPin className="w-3.5 h-3.5 text-amber-400" />
+                            <span>划词批注与即时流式释义</span>
+                          </h3>
+                          <p className="text-[11px] text-amber-200/80 mt-0.5 leading-relaxed">
+                            在左侧讲义划选词句即可在此实时流式生成解答，并支持一键「原位嵌入讲义段落下方」同步 Obsidian！
+                          </p>
+                        </div>
+
+                        {taskAnnotations.length === 0 ? (
+                          <div className="text-center py-10 text-zinc-500">
+                            <IconPin className="w-9 h-9 text-zinc-600 mx-auto mb-2 opacity-50" />
+                            <p className="text-xs font-medium text-zinc-400">当前节暂无划词批注</p>
+                            <p className="text-[11px] text-zinc-500 mt-1">在左侧讲义划选不懂的概念，点击「⚡ 即刻释义」或「🗣️ 大白话重讲」</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {taskAnnotations.map((ann, idx) => (
+                              <div key={ann.id} className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-900/90 hover:border-amber-500/40 transition-all shadow-sm space-y-2.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[11px] font-black text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <IconPin className="w-3 h-3 text-amber-400" />
+                                    <span>批注 #{taskAnnotations.length - idx}</span>
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] text-zinc-500">{ann.createdAt}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteAnnotation(ann.id)}
+                                      className="text-[11px] text-zinc-500 hover:text-rose-400 font-bold px-1.5 py-0.5 rounded hover:bg-zinc-800 flex items-center gap-1 transition-colors"
+                                      title="删除此条批注"
+                                    >
+                                      <IconTrash className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="p-2.5 bg-zinc-950 border-l-4 border-amber-400 rounded-r-lg text-[11px] font-mono text-amber-100/90 leading-relaxed max-h-24 overflow-y-auto">
+                                  “{ann.selectedText}”
+                                </div>
+
+                                {ann.comment && (
+                                  <div className="text-[11px] font-bold text-zinc-300 flex items-start gap-1.5 bg-zinc-950/60 p-2 rounded-lg border border-zinc-800/80">
+                                    <span className="text-amber-400 font-black flex-shrink-0">💬</span>
+                                    <span>{ann.comment}</span>
+                                  </div>
+                                )}
+
+                                {ann.aiResponse ? (
+                                  <div className="p-3 bg-amber-500/5 rounded-xl border border-amber-500/25 text-xs text-zinc-200 leading-relaxed space-y-2">
+                                    <div className="flex flex-wrap items-center justify-between border-b border-amber-500/20 pb-1.5 gap-1.5">
+                                      <div className="flex items-center gap-1.5 text-amber-400 font-black text-[11px]">
+                                        <IconSparkles className="w-3.5 h-3.5 text-amber-400" />
+                                        <span>{ann.aiStatus === 'generating' ? '导师实时生成中...' : '导师即时解答'}</span>
+                                      </div>
+                                      {ann.aiStatus !== 'generating' && (
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleInsertAnnotationInline(ann)}
+                                            className="text-[10px] font-bold text-emerald-300 hover:text-emerald-200 flex items-center gap-1 px-2 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all active:scale-95"
+                                            title="智能匹配原文位置，将此批注作为 Callout 卡片嵌入讲义对应段落下方并同步 Obsidian"
+                                          >
+                                            <span>📥 原位嵌入讲义</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleAppendAnnotationToNotes(ann)}
+                                            className="text-[10px] font-bold text-amber-300 hover:text-amber-200 flex items-center gap-1 px-2 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all active:scale-95"
+                                            title="追加写入本节笔记末尾并同步 Obsidian"
+                                          >
+                                            <IconCheck className="w-3 h-3 text-amber-400" />
+                                            <span>追加文末</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setChatTrigger({
+                                                id: Date.now(),
+                                                prompt: `关于讲义中的原文「${ann.selectedText}」（问题：${ann.comment}），我还有进一步疑问想和你深入探讨，请继续举例拆解。`,
+                                              });
+                                              selectModalView('gemini');
+                                            }}
+                                            className="text-[10px] font-bold text-zinc-300 hover:text-zinc-100 flex items-center gap-1 px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-all active:scale-95"
+                                          >
+                                            <IconAI className="w-3 h-3 text-amber-400" />
+                                            <span>深入追问</span>
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div
+                                      className="courseware-content max-w-none text-zinc-300 leading-relaxed select-text"
+                                      dangerouslySetInnerHTML={{ __html: renderMarkdown(ann.aiResponse) }}
+                                    />
+                                  </div>
+                                ) : ann.aiStatus === 'generating' ? (
+                                  <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/30 flex items-center gap-2 text-xs text-amber-300 font-bold">
+                                    <span className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                                    <span>导师正在连接教材上下文流式作答...</span>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleExplainExistingAnnotation(ann)}
+                                    className="w-full py-2 bg-zinc-850 hover:bg-zinc-800 text-amber-300 border border-amber-500/30 hover:border-amber-500/60 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                                  >
+                                    <IconLightning className="w-3.5 h-3.5 text-amber-400" />
+                                    <span>呼叫 AI 立即解答该批注疑问</span>
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 sm:p-5 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-3 bg-zinc-950/80">
+            <div className="px-4 py-3 sm:px-5 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-2.5 bg-zinc-950/85">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -3212,7 +3626,7 @@ const App: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2">
-                {modalActiveTab === 'notes' && (
+                {activeLeftTab === 'notes' && (
                   <button
                     type="button"
                     onClick={handleSaveTask}
@@ -3235,7 +3649,8 @@ const App: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Mini Dialog for Creating Annotation */}
       {isAnnotationModalOpen && selectedHighlight && editingTask && (
@@ -3523,6 +3938,7 @@ const App: React.FC = () => {
       <AISettingsModal
         isOpen={isAISettingsOpen}
         onClose={() => setIsAISettingsOpen(false)}
+        onSave={(savedCfg) => setAiSettings(savedCfg)}
         currentUserId={currentUser?.id}
       />
 
