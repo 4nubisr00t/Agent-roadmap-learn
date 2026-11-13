@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { renderMarkdown, triggerMermaidRender } from '../utils/markdown.js';
 import { SYSTEM_PROMPTS, AISettingsState, loadMergedAISettings, normalizeSavedSettings } from './modals/AISettingsModal.js';
 import { IconAI, IconUser, IconBook, IconSend, IconTrash, IconSettings, IconFileText, IconSparkles, IconLightning } from './Icons.js';
+import { useFeedback } from './FeedbackProvider.js';
 
 interface Task {
   id: string;
@@ -64,6 +65,7 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
   const [streamBuffer, setStreamBuffer] = useState('');
   const [activeSettings, setActiveSettings] = useState<AISettingsState>(() => loadMergedAISettings(currentUserId));
   const [serverKeys, setServerKeys] = useState<{ vertex: boolean; anubis: boolean }>({ vertex: true, anubis: true });
+  const { confirm, toast } = useFeedback();
   const lastTriggerIdRef = useRef<number>(0);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -120,10 +122,17 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
     }
   }, [externalTrigger]);
 
-  const handleClearHistory = () => {
-    if (confirm('确认清空当前节点的对话记录吗？')) {
+  const handleClearHistory = async () => {
+    const ok = await confirm({
+      title: '清空节点对话记录',
+      message: `确认清空【${task.title}】的 AI 伴学对话记录吗？`,
+      confirmText: '确认清空',
+      danger: true,
+    });
+    if (ok) {
       setMessages([]);
       localStorage.removeItem(cacheKey);
+      toast.info('已清空当前节点对话记录');
     }
   };
 
@@ -145,7 +154,12 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
     const isLocalModel = engine.providerId === 'ollama' || (engine.baseUrl || '').includes('localhost') || (engine.baseUrl || '').includes('127.0.0.1');
 
     if (!engine.apiKey && !isServerHosted && !isLocalModel) {
-      if (confirm('当前伴学引擎未配置 API Key，也未命中服务端托管密钥，是否现在打开 AI 配置面板？')) {
+      const ok = await confirm({
+        title: '尚未配置大模型密钥',
+        message: '当前伴学引擎未配置 API Key，也未命中服务端托管密钥，是否现在打开 AI 配置中心？',
+        confirmText: '去配置',
+      });
+      if (ok) {
         onOpenAISettings();
       }
       return;

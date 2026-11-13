@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import TagBadge from '../TagBadge.js';
 import ColorPicker from '../ColorPicker.js';
 import { IconPin, IconClose, IconPlus, IconTrash, IconEdit, IconCheck } from '../Icons.js';
+import { useFeedback } from '../FeedbackProvider.js';
 
 interface Tag {
   id: string;
@@ -27,6 +28,7 @@ const TagManagerModal: React.FC<TagManagerModalProps> = ({
   tags,
   onTagsChange,
 }) => {
+  const { toast, confirm } = useFeedback();
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#F59E0B');
   const [editingTagId, setEditingTagId] = useState<string | null>(null);
@@ -90,7 +92,13 @@ const TagManagerModal: React.FC<TagManagerModalProps> = ({
   };
 
   const handleDeleteTag = async (tagId: string) => {
-    if (!confirm('确定要删除此标签吗？')) return;
+    const ok = await confirm({
+      title: '删除知识标签',
+      message: '确定要删除此标签吗？关联节点上的该标签引用也将同步移除。',
+      confirmText: '确认删除',
+      danger: true,
+    });
+    if (!ok) return;
     setIsLoading(true);
     try {
       const response = await fetch(`/api/projects/${projectId}/tags/${tagId}`, {
@@ -100,10 +108,12 @@ const TagManagerModal: React.FC<TagManagerModalProps> = ({
         const result = await response.json();
         if (result.success) {
           onTagsChange(tags.filter(t => t.id !== tagId));
+          toast.success('标签已删除');
         }
       }
     } catch (error) {
       console.error('Failed to delete tag:', error);
+      toast.error('删除标签失败');
     } finally {
       setIsLoading(false);
     }

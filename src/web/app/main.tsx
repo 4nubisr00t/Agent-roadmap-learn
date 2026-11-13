@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import '@xyflow/react/dist/style.css';
 
 import App from './App.js';
+import { FeedbackProvider } from './components/FeedbackProvider.js';
 
 // Global API fetch interceptor to automatically attach Authorization Bearer token
 const originalFetch = window.fetch.bind(window);
@@ -23,6 +24,8 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <FeedbackProvider>
+      <App />
+    </FeedbackProvider>
   </React.StrictMode>
 );

@@ -11,6 +11,9 @@ import { AISettingsModal, AISettingsState, loadMergedAISettings, normalizeSavedS
 import { DocumentManagerModal } from './components/modals/DocumentManagerModal.js';
 import { AIRoadmapGeneratorModal } from './components/modals/AIRoadmapGeneratorModal.js';
 import { TaskAIChat } from './components/TaskAIChat.js';
+import { useFeedback } from './components/FeedbackProvider.js';
+import { CommandPaletteModal } from './components/CommandPaletteModal.js';
+import { AnnotationDigestModal } from './components/modals/AnnotationDigestModal.js';
 import {
   IconAI,
   IconLightning,
@@ -145,11 +148,16 @@ export interface AnnotationItem {
 }
 
 const App: React.FC = () => {
+  const { toast, confirm } = useFeedback();
   const [currentUser, setCurrentUser] = useState<{ id: string; username: string } | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isAISettingsOpen, setIsAISettingsOpen] = useState(false);
   const [isDocManagerOpen, setIsDocManagerOpen] = useState(false);
   const [isAIGeneratorOpen, setIsAIGeneratorOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isAnnotationDigestOpen, setIsAnnotationDigestOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
   const [generatorPreDoc, setGeneratorPreDoc] = useState<{ id: string; title: string } | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
@@ -284,12 +292,33 @@ const App: React.FC = () => {
   );
   const [appMeta, setAppMeta] = useState<AppMeta>({
     version: '',
-    repositoryUrl: 'https://github.com/shiquda/roadmap-skill',
+    repositoryUrl: 'https://github.com/4nubisr00t/Agent-roadmap-learn',
   });
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const tasksRequestIdRef = useRef(0);
   const tagsRequestIdRef = useRef(0);
   const graphViewsRequestIdRef = useRef(0);
+
+  // Global Ctrl/Cmd + K shortcut for Command Palette + click-outside for User Menu
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
+      }
+    };
+    const handleClickOutsideMenu = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    document.addEventListener('mousedown', handleClickOutsideMenu);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+      document.removeEventListener('mousedown', handleClickOutsideMenu);
+    };
+  }, []);
 
   const resetNewTaskForm = () => {
     setNewTaskForm({
@@ -383,17 +412,13 @@ const App: React.FC = () => {
           if (user) {
             setCurrentUser(user);
           } else {
-            setIsAuthModalOpen(true);
+            setCurrentUser(null);
           }
         })
         .catch(() => {
           localStorage.removeItem('roadmap_auth_token');
           setCurrentUser(null);
-          setIsAuthModalOpen(true);
         });
-    } else {
-      // First visit or not logged in: pop up login/register modal immediately
-      setIsAuthModalOpen(true);
     }
   }, []);
 
@@ -750,11 +775,12 @@ const App: React.FC = () => {
         if (!silent) {
           setVaultSyncMessage(`✅ 已推送到 Obsidian: ${data.relativePath} (Syncthing 秒级多端同步中)`);
           setTimeout(() => setVaultSyncMessage(null), 4000);
+          toast.success(`已推送到 Obsidian: ${data.relativePath}`);
         }
         fetchVaultStatus();
       } else {
         setNoteAutoSaveState('idle');
-        if (!silent) alert(`同步 Obsidian 失败: ${data.error}`);
+        if (!silent) toast.error(`同步 Obsidian 失败: ${data.error}`);
       }
     } catch (err: any) {
       setNoteAutoSaveState('idle');
@@ -764,7 +790,7 @@ const App: React.FC = () => {
 
   const handleSyncCurrentProjectToObsidian = async () => {
     if (!selectedProject) {
-      alert('请先选择一个知识图谱项目');
+      toast.info('请先选择一个知识图谱项目');
       return;
     }
     const currentProj = projects.find(p => p.project.id === selectedProject)?.project;
@@ -779,13 +805,13 @@ const App: React.FC = () => {
       });
       const data = await res.json();
       if (data.success) {
-        alert(`🎉 恭喜！已将「${currentProj.name}」的 ${data.syncedCount} 篇讲义与总览大纲 MOC 完整同步至 Obsidian Vault！\nSyncthing 守护进程将在数秒内推送到您的手机与平板客户端。`);
+        toast.success(`已将「${currentProj.name}」的 ${data.syncedCount} 篇讲义与总览大纲同步至 Obsidian Vault，Syncthing 将在数秒内推送到各终端。`);
         fetchVaultStatus();
       } else {
-        alert(`同步 Obsidian 失败: ${data.error}`);
+        toast.error(`同步 Obsidian 失败: ${data.error}`);
       }
     } catch (err: any) {
-      alert(`同步请求异常: ${err.message}`);
+      toast.error(`同步请求异常: ${err.message}`);
     } finally {
       setIsSyncingVault(false);
     }
@@ -803,11 +829,12 @@ const App: React.FC = () => {
         setEditingTask(prev => prev ? { ...prev, description: data.content } : null);
         setVaultSyncMessage('✅ 已从 Obsidian 笔记库载入最新修改');
         setTimeout(() => setVaultSyncMessage(null), 3000);
+        toast.success('已从 Obsidian 笔记库载入最新修改');
       } else {
-        alert('未在 Obsidian 中检测到外部更改或该文件尚未写入。');
+        toast.info('未在 Obsidian 中检测到外部更改或该文件尚未写入。');
       }
     } catch (err: any) {
-      alert(`读取错误: ${err.message}`);
+      toast.error(`读取错误: ${err.message}`);
     }
   };
 
@@ -970,7 +997,7 @@ const App: React.FC = () => {
       setTasks(prev => prev.map(item => item.task.id === updatedTask.id ? { ...item, task: updatedTask } : item));
       setStreamingLectureText('');
     } catch (err: any) {
-      alert(err.message || 'AI 填充失败，请检查网络或配置');
+      toast.error(err.message || 'AI 填充失败，请检查网络或配置');
     } finally {
       setIsEnrichingTask(false);
       setEnrichStatusText('');
@@ -1160,7 +1187,7 @@ const App: React.FC = () => {
         setTimeout(() => setVaultSyncMessage(null), 4000);
       }
     } catch {
-      alert('写入讲义笔记失败，请重试');
+      toast.error('写入讲义笔记失败，请重试');
     }
   };
 
@@ -1243,7 +1270,13 @@ const App: React.FC = () => {
   };
 
   const handleDeleteTask = async (taskId: string, projectId: string) => {
-    if (!confirm('Are you sure you want to delete this task?')) return;
+    const confirmed = await confirm({
+      title: '删除知识模块',
+      message: '确定要删除这个知识模块吗？删除后讲义与关联批注记录将无法恢复。',
+      confirmText: '确认删除',
+      danger: true,
+    });
+    if (!confirmed) return;
 
     try {
       const response = await fetch(`/api/tasks?projectId=${projectId}&taskId=${taskId}`, {
@@ -1257,14 +1290,22 @@ const App: React.FC = () => {
             ? { ...p, taskCount: p.taskCount - 1 }
             : p
         ));
+        toast.success('知识模块已删除');
       }
     } catch (error) {
       console.error('Failed to delete task:', error);
+      toast.error('删除知识模块失败');
     }
   };
 
   const handleDeleteProject = async (projectId: string) => {
-    if (!confirm('Are you sure you want to delete this project? All tasks will be deleted.')) return;
+    const confirmed = await confirm({
+      title: '删除整本技能树',
+      message: '确定要删除该学习项目吗？其包含的所有知识模块、拓扑图与学习进度都将永久移除。',
+      confirmText: '确认删除项目',
+      danger: true,
+    });
+    if (!confirmed) return;
 
     try {
       const response = await fetch(`/api/projects?projectId=${projectId}`, {
@@ -1277,9 +1318,11 @@ const App: React.FC = () => {
           setSelectedProject(null);
         }
         setTasks(prev => prev.filter(t => t.project.id !== projectId));
+        toast.success('已删除学习项目');
       }
     } catch (error) {
       console.error('Failed to delete project:', error);
+      toast.error('删除学习项目失败');
     }
   };
 
@@ -1299,8 +1342,9 @@ const App: React.FC = () => {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
+      toast.success('已导出 JSON 备份档案');
     } catch (error) {
-      alert('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      toast.error('导出备份失败: ' + (error instanceof Error ? error.message : '未知错误'));
     }
   };
 
@@ -1745,6 +1789,68 @@ const App: React.FC = () => {
   const totalTasksCount = tasks.length;
   const progressPercent = totalTasksCount > 0 ? Math.round((doneTasksCount / totalTasksCount) * 100) : 0;
 
+  // Smart Continue Learning target: in-progress -> review -> todo -> any
+  const recommendedContinueItem = useMemo(() => {
+    const scope = selectedProject
+      ? tasks.filter(item => item.project.id === selectedProject)
+      : tasks;
+    if (scope.length === 0) return null;
+    return (
+      scope.find(item => normalizeStatus(item.task.status) === 'in-progress') ||
+      scope.find(item => normalizeStatus(item.task.status) === 'review') ||
+      scope.find(item => normalizeStatus(item.task.status) === 'todo') ||
+      scope[0]
+    );
+  }, [tasks, selectedProject]);
+
+  const handleContinueLearning = () => {
+    if (!recommendedContinueItem) {
+      if (!currentUser) {
+        setIsAuthModalOpen(true);
+      } else {
+        setGeneratorPreDoc(null);
+        setIsAIGeneratorOpen(true);
+      }
+      return;
+    }
+    if (selectedProject !== recommendedContinueItem.project.id) {
+      setSelectedProject(recommendedContinueItem.project.id);
+    }
+    selectModalView('courseware');
+    handleEditTask(recommendedContinueItem.task);
+  };
+
+  const handleJumpToProjectTask = async (projectId: string, taskId: string) => {
+    const existing = tasks.find(item => item.task.id === taskId);
+    if (existing) {
+      if (existing.project.id && selectedProject !== existing.project.id) {
+        setSelectedProject(existing.project.id);
+      }
+      selectModalView('courseware');
+      handleEditTask(existing.task);
+      return;
+    }
+    try {
+      const qs = projectId
+        ? `/api/tasks?projectId=${encodeURIComponent(projectId)}&includeCompleted=true`
+        : `/api/tasks?includeCompleted=true`;
+      const res = await fetch(qs);
+      if (res.ok) {
+        const list = (await res.json()) as { task: Task; project: Project }[];
+        const hit = list.find(item => item.task.id === taskId);
+        if (hit) {
+          setSelectedProject(hit.project.id);
+          selectModalView('courseware');
+          handleEditTask(hit.task);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Jump to task failed:', err);
+    }
+    toast.info('未找到对应知识模块，可能已被移除');
+  };
+
   return (
     <div className="min-h-screen bg-transparent p-2 sm:p-6 text-zinc-100">
       {/* Mobile Top Header (< md) */}
@@ -1835,18 +1941,31 @@ const App: React.FC = () => {
             <span className="text-[10px] text-zinc-500">▾</span>
           </button>
 
-          {totalTasksCount > 0 && (
-            <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 font-medium">
-              <span>{doneTasksCount}/{totalTasksCount}</span>
-              <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden p-0.2">
-                <div
-                  className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full"
-                  style={{ width: `${progressPercent}%` }}
-                />
+          <div className="flex items-center gap-2">
+            {recommendedContinueItem && (
+              <button
+                type="button"
+                onClick={handleContinueLearning}
+                className="px-2.5 py-1 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black rounded-lg text-[11px] flex items-center gap-1 active:scale-95 shadow-sm"
+                title={`继续学习：${recommendedContinueItem.task.title}`}
+              >
+                <span>▶</span>
+                <span>继续</span>
+              </button>
+            )}
+            {totalTasksCount > 0 && (
+              <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 font-medium">
+                <span>{doneTasksCount}/{totalTasksCount}</span>
+                <div className="w-14 h-1.5 bg-zinc-800 rounded-full overflow-hidden p-0.2">
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <span className="text-amber-400 font-bold">{progressPercent}%</span>
               </div>
-              <span className="text-amber-400 font-bold">{progressPercent}%</span>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </header>
 
@@ -1998,6 +2117,24 @@ const App: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setIsMobileDrawerOpen(false);
+                    setIsAnnotationDigestOpen(true);
+                  }}
+                  className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold bg-zinc-950/80 border border-zinc-800 text-zinc-300 flex items-center justify-between gap-2.5 active:scale-95 transition-all"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <IconFileText className="w-4 h-4 text-amber-400" />
+                    <span>全书批注精华本</span>
+                  </span>
+                  {annotations.length > 0 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold">
+                      {annotations.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileDrawerOpen(false);
                     setIsTagManagerOpen(true);
                   }}
                   className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold bg-zinc-950/80 border border-zinc-800 text-zinc-300 flex items-center gap-2.5 active:scale-95 transition-all"
@@ -2087,7 +2224,7 @@ const App: React.FC = () => {
       )}
 
       {/* Desktop Header (>= md) */}
-      <header className="hidden md:flex mb-6 flex-wrap justify-between items-center gap-4 bg-zinc-900/80 backdrop-blur-xl p-4 rounded-2xl border border-zinc-800 shadow-2xl">
+      <header className="hidden md:flex mb-5 flex-wrap justify-between items-center gap-3 bg-zinc-900/80 backdrop-blur-xl px-5 py-3.5 rounded-2xl border border-zinc-800 shadow-2xl relative z-30">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-zinc-950 text-xl shadow-lg shadow-amber-500/20 font-black">
             <IconLightning className="w-5 h-5 text-zinc-950" />
@@ -2096,22 +2233,22 @@ const App: React.FC = () => {
             <h1 className="text-xl font-black text-zinc-100 tracking-tight flex items-center gap-2">
               智学<span className="text-amber-400">工坊</span>
               <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                专属进阶学习平台
+                AgentLearn
               </span>
             </h1>
-            <p className="text-xs text-zinc-400 font-medium">直连大模型 API · 多账号独立隔离 · 知识库投喂</p>
+            <p className="text-xs text-zinc-400 font-medium">AI 教材拆书 · 知识拓扑图谱 · 伴学精讲工作台</p>
           </div>
         </div>
 
         {totalTasksCount > 0 && (
-          <div className="flex items-center gap-4 bg-zinc-950/80 px-4 py-2 rounded-xl border border-zinc-800/80 shadow-inner">
+          <div className="flex items-center gap-3 bg-zinc-950/80 px-3.5 py-2 rounded-xl border border-zinc-800/80 shadow-inner">
             <div className="text-right">
-              <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">技能补齐进度</div>
-              <div className="text-sm font-black text-zinc-200">
-                {doneTasksCount} / {totalTasksCount} 模块 <span className="text-amber-400 font-bold">({progressPercent}%)</span>
+              <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">掌握进度</div>
+              <div className="text-xs font-black text-zinc-200">
+                {doneTasksCount}/{totalTasksCount} <span className="text-amber-400 font-bold">({progressPercent}%)</span>
               </div>
             </div>
-            <div className="w-28 h-2.5 bg-zinc-800 rounded-full overflow-hidden p-0.5">
+            <div className="w-24 h-2 bg-zinc-800 rounded-full overflow-hidden p-0.5">
               <div
                 className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full transition-all duration-700 shadow-sm shadow-amber-500/30"
                 style={{ width: `${progressPercent}%` }}
@@ -2120,7 +2257,19 @@ const App: React.FC = () => {
           </div>
         )}
 
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {recommendedContinueItem && (
+            <button
+              type="button"
+              onClick={handleContinueLearning}
+              title={`继续学习：${recommendedContinueItem.task.title}`}
+              className="px-3.5 py-1.5 text-xs font-black bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-105 text-zinc-950 rounded-xl shadow-md shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-1.5"
+            >
+              <span>▶</span>
+              <span>继续学习</span>
+            </button>
+          )}
+
           <div className="flex bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-1 shadow-inner">
             <button
               type="button"
@@ -2153,7 +2302,7 @@ const App: React.FC = () => {
             <button
               type="button"
               onClick={() => setCardMode('compact')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${
+              className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${
                 cardMode === 'compact'
                   ? 'bg-zinc-800 text-amber-300 shadow-sm font-bold'
                   : 'text-zinc-400 hover:text-zinc-200'
@@ -2164,7 +2313,7 @@ const App: React.FC = () => {
             <button
               type="button"
               onClick={() => setCardMode('detailed')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${
+              className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${
                 cardMode === 'detailed'
                   ? 'bg-zinc-800 text-amber-300 shadow-sm font-bold'
                   : 'text-zinc-400 hover:text-zinc-200'
@@ -2185,61 +2334,46 @@ const App: React.FC = () => {
           )}
           <div className="h-5 w-px bg-zinc-800" />
           <div className="flex bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-1">
-            {(['all', 'active', 'completed'] as StatusFilter[]).map(f => (
-                <button
-                  type="button"
-                  key={f}
-                onClick={() => setStatusFilter(f)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all capitalize active:scale-95 ${
-                  statusFilter === f
+            {([
+              { id: 'all', label: '全部' },
+              { id: 'active', label: '进行中' },
+              { id: 'completed', label: '已完成' },
+            ] as { id: StatusFilter; label: string }[]).map(f => (
+              <button
+                type="button"
+                key={f.id}
+                onClick={() => setStatusFilter(f.id)}
+                className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${
+                  statusFilter === f.id
                     ? 'bg-zinc-800 text-amber-300 shadow-sm font-bold'
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                {f}
+                {f.label}
               </button>
             ))}
           </div>
-          <div className="h-5 w-px bg-zinc-800" />
-          <div className="relative">
-            <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+
+          <div className="relative flex items-center">
+            <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" />
             <input
               ref={searchInputRef}
               type="text"
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder="搜索学习模块..."
-              className="pl-8 pr-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all w-36 sm:w-44 shadow-inner"
+              placeholder="筛选模块..."
+              className="pl-8 pr-14 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all w-36 xl:w-44 shadow-inner"
             />
-          </div>
-          <div className="h-5 w-px bg-zinc-800" />
-          {currentUser ? (
-            <div className="flex items-center gap-2 bg-zinc-950/90 border border-zinc-800 px-3 py-1.5 rounded-xl shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              <span className="text-xs font-black text-zinc-200">
-                {currentUser.username}
-              </span>
-              <button
-                type="button"
-                onClick={handleLogout}
-                title="退出登录"
-                className="text-zinc-400 hover:text-rose-400 text-xs font-medium ml-1 transition-colors px-1.5 py-0.5 rounded hover:bg-zinc-800 flex items-center gap-1 active:scale-95"
-              >
-                <IconLogout className="w-3 h-3" />
-                <span>退出</span>
-              </button>
-            </div>
-          ) : (
             <button
               type="button"
-              onClick={() => setIsAuthModalOpen(true)}
-              className="px-3.5 py-1.5 text-xs font-black bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:brightness-105 text-zinc-950 rounded-xl shadow-md shadow-amber-500/10 active:scale-95 transition-all flex items-center gap-1.5"
+              onClick={() => setIsCommandPaletteOpen(true)}
+              title="打开全局命令与知识检索面板 (Ctrl/Cmd + K)"
+              className="absolute right-1.5 px-1.5 py-0.5 text-[10px] font-mono font-bold text-zinc-400 hover:text-amber-300 bg-zinc-850 hover:bg-zinc-800 border border-zinc-700/80 rounded-md transition-colors"
             >
-              <IconLock className="w-3.5 h-3.5" />
-              <span>登录 / 注册</span>
+              ⌘K
             </button>
-          )}
-          <div className="h-5 w-px bg-zinc-800" />
+          </div>
+
           <button
             type="button"
             onClick={() => {
@@ -2250,11 +2384,12 @@ const App: React.FC = () => {
               }
             }}
             title="管理与上传个人专属资料/电子书"
-            className="px-3.5 py-1.5 text-xs font-bold bg-zinc-900/90 hover:bg-zinc-850 text-amber-300 border border-amber-500/30 hover:border-amber-500/60 rounded-xl shadow-sm transition-all flex items-center gap-1.5 active:scale-95"
+            className="px-3 py-1.5 text-xs font-bold bg-zinc-900/90 hover:bg-zinc-850 text-amber-300 border border-amber-500/30 hover:border-amber-500/60 rounded-xl shadow-sm transition-all flex items-center gap-1.5 active:scale-95"
           >
             <IconBook className="w-3.5 h-3.5 text-amber-400" />
-            <span>我的资料库</span>
+            <span>资料库</span>
           </button>
+
           <button
             type="button"
             onClick={() => setIsAISettingsOpen(true)}
@@ -2271,69 +2406,130 @@ const App: React.FC = () => {
             </span>
             <IconSettings className="w-3.5 h-3.5 text-amber-400/90" />
           </button>
-          <button
-            type="button"
-            onClick={handleSyncCurrentProjectToObsidian}
-            disabled={isSyncingVault || !selectedProject}
-            title={vaultStatus?.available
-              ? `将当前知识图谱全量讲义与总览大纲同步至 Obsidian (${vaultStatus.vaultPath})，Syncthing 秒级推送到手机/平板/电脑`
-              : '同步至 Obsidian 笔记库'}
-            className="px-3.5 py-1.5 text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:border-amber-500/60 rounded-xl shadow-sm transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
-          >
-            <span className="text-sm">💎</span>
-            <span>{isSyncingVault ? '同步 Obsidian 中...' : 'Obsidian 库同步'}</span>
-            {vaultStatus?.syncthingDetected && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="Syncthing 多端同步监听就绪" />
-            )}
-          </button>
+
+          {currentUser ? (
+            <div className="relative" ref={userMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsUserMenuOpen(prev => !prev)}
+                className="flex items-center gap-2 bg-zinc-950/90 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/40 pl-2 pr-3 py-1 rounded-xl shadow-sm transition-all active:scale-95"
+                title="工作区与账户菜单"
+              >
+                <span className="w-6 h-6 rounded-lg bg-gradient-to-tr from-amber-500 to-yellow-400 text-zinc-950 font-black text-xs flex items-center justify-center">
+                  {currentUser.username.slice(0, 1).toUpperCase()}
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs font-black text-zinc-200 max-w-[90px] truncate">
+                  {currentUser.username}
+                </span>
+                <span className="text-[10px] text-zinc-500">▾</span>
+              </button>
+
+              {isUserMenuOpen && (
+                <div className="absolute right-0 mt-2 w-64 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-2 z-50 animate-fadeIn">
+                  <div className="px-3 py-2.5 border-b border-zinc-800/80 mb-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-zinc-100">{currentUser.username}</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold">
+                        专属物理隔离
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 mt-1">
+                      教材、知识树、批注与对话独立存储
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      setIsAnnotationDigestOpen(true);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-200 hover:bg-zinc-800 hover:text-amber-300 flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>📖</span>
+                      <span>全书批注精华本</span>
+                    </span>
+                    {annotations.length > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold">
+                        {annotations.length}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isSyncingVault || !selectedProject}
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      handleSyncCurrentProjectToObsidian();
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-200 hover:bg-zinc-800 hover:text-amber-300 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>💎</span>
+                      <span>{isSyncingVault ? '同步 Obsidian 中...' : 'Obsidian 全库同步'}</span>
+                    </span>
+                    {vaultStatus?.syncthingDetected && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Syncthing 多端同步就绪" />
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      handleExport();
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-300 hover:bg-zinc-800 hover:text-amber-300 flex items-center gap-2 transition-colors"
+                  >
+                    <span>📤</span>
+                    <span>导出全库备份 (JSON)</span>
+                  </button>
+
+                  <div className="my-1.5 border-t border-zinc-800/80" />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      setIsAuthModalOpen(true);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 flex items-center gap-2 transition-colors"
+                  >
+                    <IconUser className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>切换其他账号</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      handleLogout();
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 transition-colors"
+                  >
+                    <IconLogout className="w-3.5 h-3.5" />
+                    <span>退出当前登录</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsAuthModalOpen(true)}
+              className="px-3.5 py-1.5 text-xs font-black bg-zinc-850 hover:bg-zinc-800 text-amber-300 border border-amber-500/40 rounded-xl shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
+            >
+              <IconLock className="w-3.5 h-3.5" />
+              <span>登录 / 注册</span>
+            </button>
+          )}
         </div>
       </header>
 
-      {/* Multi-tenant User Isolation Status Banner */}
-      {!currentUser ? (
-        <div className="mb-6 bg-amber-500/10 border border-amber-500/30 px-5 py-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-lg backdrop-blur-md animate-fadeIn">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold flex-shrink-0">
-              <IconLock className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-xs font-black text-amber-300">当前处于【访客浏览】模式</div>
-              <div className="text-[11px] text-zinc-400 mt-0.5">
-                登录或注册账号后，即可享有与家人<strong>完全物理隔离</strong>的专属电子书资料库、学习路线与即时 AI 导师辅导空间。
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setIsAuthModalOpen(true)}
-            className="px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black rounded-xl text-xs hover:brightness-105 shadow-md shadow-amber-500/20 transition-all active:scale-95 flex items-center gap-1.5"
-          >
-            <IconLock className="w-3.5 h-3.5" />
-            <span>登录 / 注册专属空间</span>
-          </button>
-        </div>
-      ) : (
-        <div className="mb-6 bg-zinc-900/60 border border-zinc-800/80 px-5 py-2.5 rounded-2xl flex flex-wrap items-center justify-between gap-2 shadow-lg backdrop-blur-md animate-fadeIn">
-          <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/50" />
-            <span className="text-xs text-zinc-300">
-              已进入专属隔离空间：<strong className="text-amber-400 font-black text-sm">{currentUser.username}</strong>
-            </span>
-            <span className="text-[11px] text-zinc-400 hidden sm:inline">
-              （上传的电子书资料、生成的技能树及 AI 对话均严格物理隔离保密）
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setIsAuthModalOpen(true)}
-            className="text-xs text-amber-400 hover:text-amber-300 hover:underline font-bold transition-all"
-          >
-            切换其他账号
-          </button>
-        </div>
-      )}
-
-      <div className="flex min-h-0 flex-col gap-4 lg:gap-6 h-[calc(100vh-135px)] sm:h-[calc(100vh-160px)] lg:h-[calc(100vh-10.5rem)] lg:flex-row">
+      <div className="flex min-h-0 flex-col gap-4 lg:gap-6 h-[calc(100vh-120px)] sm:h-[calc(100vh-130px)] lg:h-[calc(100vh-8.2rem)] lg:flex-row">
         <aside
           className={`hidden lg:flex min-h-0 flex-shrink-0 flex-col rounded-[28px] border border-zinc-800/80 bg-zinc-900/60 p-4 shadow-xl backdrop-blur-xl transition-all duration-300 lg:h-full ${
             isProjectSidebarCollapsed ? 'lg:w-24' : 'lg:w-60'
@@ -2437,6 +2633,24 @@ const App: React.FC = () => {
           <div className="mt-6 border-t border-zinc-800/80 pt-6 space-y-2">
             <button
               type="button"
+              onClick={() => setIsAnnotationDigestOpen(true)}
+              className={`w-full flex items-center text-xs font-bold text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 rounded-xl transition-all group active:scale-[0.98] ${
+                isProjectSidebarCollapsed ? 'justify-center px-2 py-2.5' : 'justify-between gap-3 px-3.5 py-2.5'
+              }`}
+              title={isProjectSidebarCollapsed ? '批注精华本' : '回顾全书划词批注并导出 Markdown'}
+            >
+              <span className="flex items-center gap-3">
+                <IconFileText className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                {!isProjectSidebarCollapsed && <span>批注精华本</span>}
+              </span>
+              {!isProjectSidebarCollapsed && annotations.length > 0 && (
+                <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-black text-amber-300">
+                  {annotations.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
               onClick={() => setIsTagManagerOpen(true)}
               disabled={!selectedProject}
               className={`w-full flex items-center text-xs font-bold text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 rounded-xl transition-all group disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] ${
@@ -2533,7 +2747,97 @@ const App: React.FC = () => {
               </button>
             </div>
           )}
-          {workspaceMode === 'kanban' ? (
+          {projects.length === 0 && !activeBuildingJob ? (
+            <div className="h-full min-h-[420px] flex items-center justify-center p-4 sm:p-8 overflow-y-auto">
+              <div className="max-w-3xl w-full bg-zinc-900/75 border border-zinc-800/90 rounded-3xl p-6 sm:p-10 shadow-2xl backdrop-blur-xl animate-fadeIn">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-black mb-4">
+                  <IconSparkles className="w-3.5 h-3.5" />
+                  <span>AgentLearn 双引擎智学工作台</span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black text-zinc-100 tracking-tight mb-2">
+                  把厚重的专业教材，拆解成可交互的<span className="text-amber-400">知识拓扑图</span>
+                </h2>
+                <p className="text-sm text-zinc-400 leading-relaxed mb-7">
+                  {currentUser
+                    ? `欢迎回来，${currentUser.username}！当前学习空间尚未创建课程，只需三步即可开启你的 AI 伴学之旅：`
+                    : '无需繁琐配置，登录后即可享有独立隔离资料库，三步开启 AI 教材拆解与随堂精讲：'}
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                  <div className="bg-zinc-950/80 border border-zinc-800/90 rounded-2xl p-4 hover:border-amber-500/30 transition-colors">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-black text-sm flex items-center justify-center mb-3">
+                      01
+                    </div>
+                    <h3 className="text-sm font-black text-zinc-100 mb-1">上传教材或指定主题</h3>
+                    <p className="text-xs text-zinc-400 leading-relaxed">
+                      上传 PDF / Markdown 电子书至专属资料库，或直接输入想攻克的学科主题。
+                    </p>
+                  </div>
+                  <div className="bg-zinc-950/80 border border-zinc-800/90 rounded-2xl p-4 hover:border-amber-500/30 transition-colors">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-black text-sm flex items-center justify-center mb-3">
+                      02
+                    </div>
+                    <h3 className="text-sm font-black text-zinc-100 mb-1">AI 拆书构建拓扑图谱</h3>
+                    <p className="text-xs text-zinc-400 leading-relaxed">
+                      建树引擎自动提取核心章节、梳理先修依赖，并生成结构化的学习路线。
+                    </p>
+                  </div>
+                  <div className="bg-zinc-950/80 border border-zinc-800/90 rounded-2xl p-4 hover:border-amber-500/30 transition-colors">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-black text-sm flex items-center justify-center mb-3">
+                      03
+                    </div>
+                    <h3 className="text-sm font-black text-zinc-100 mb-1">伴学精讲与划词批注</h3>
+                    <p className="text-xs text-zinc-400 leading-relaxed">
+                      点击任意节点触发分屏精讲，划词提问原位写入笔记并实时同步 Obsidian。
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {!currentUser ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsAuthModalOpen(true)}
+                      className="px-6 py-3 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black rounded-2xl text-sm hover:brightness-105 shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-2"
+                    >
+                      <IconLock className="w-4 h-4" />
+                      <span>登录 / 注册开启专属空间</span>
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGeneratorPreDoc(null);
+                          setIsAIGeneratorOpen(true);
+                        }}
+                        className="px-6 py-3 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black rounded-2xl text-sm hover:brightness-105 shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-2"
+                      >
+                        <IconSparkles className="w-4 h-4" />
+                        <span>AI 一键拆书建树</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsDocManagerOpen(true)}
+                        className="px-5 py-3 bg-zinc-950 hover:bg-zinc-850 text-amber-300 border border-amber-500/40 font-bold rounded-2xl text-sm active:scale-95 transition-all flex items-center gap-2"
+                      >
+                        <IconBook className="w-4 h-4" />
+                        <span>上传电子书教材</span>
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsAISettingsOpen(true)}
+                    className="px-4 py-3 bg-zinc-950/70 hover:bg-zinc-850 text-zinc-300 border border-zinc-800 font-bold rounded-2xl text-sm active:scale-95 transition-all flex items-center gap-2"
+                  >
+                    <IconSettings className="w-4 h-4 text-zinc-400" />
+                    <span>配置双引擎模型</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : workspaceMode === 'kanban' ? (
             <div className="flex h-full min-h-0 flex-col">
               {/* Mobile Stage Tab Selector (< md) */}
               <div className="md:hidden flex items-center gap-1.5 mb-3 overflow-x-auto pb-1">
@@ -3996,6 +4300,66 @@ const App: React.FC = () => {
             setWorkspaceMode('dependency');
           }
         }}
+      />
+
+      <CommandPaletteModal
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        projects={projects.map(p => ({
+          id: p.project.id,
+          name: p.project.name,
+          taskCount: p.taskCount,
+        }))}
+        tasks={tasks.map(t => ({
+          id: t.task.id,
+          title: t.task.title,
+          description: t.task.description,
+          status: t.task.status,
+          projectId: t.project.id,
+          projectName: t.project.name,
+        }))}
+        annotations={annotations}
+        onContinueLearning={recommendedContinueItem ? handleContinueLearning : undefined}
+        onOpenNewRoadmap={() => {
+          if (!currentUser) {
+            setIsAuthModalOpen(true);
+          } else {
+            setGeneratorPreDoc(null);
+            setIsAIGeneratorOpen(true);
+          }
+        }}
+        onOpenDocs={() => {
+          if (!currentUser) {
+            setIsAuthModalOpen(true);
+          } else {
+            setIsDocManagerOpen(true);
+          }
+        }}
+        onOpenAISettings={() => setIsAISettingsOpen(true)}
+        onOpenAnnotationDigest={() => setIsAnnotationDigestOpen(true)}
+        onSelectProject={(projectId) => setSelectedProject(projectId)}
+        onSelectTask={(projectId, taskId) => {
+          handleJumpToProjectTask(projectId, taskId);
+        }}
+      />
+
+      <AnnotationDigestModal
+        isOpen={isAnnotationDigestOpen}
+        onClose={() => setIsAnnotationDigestOpen(false)}
+        annotations={annotations}
+        taskMetaList={tasks.map(t => ({
+          taskId: t.task.id,
+          taskTitle: t.task.title,
+          projectId: t.project.id,
+          projectName: t.project.name,
+        }))}
+        selectedProjectId={selectedProject}
+        selectedProjectName={projects.find(p => p.project.id === selectedProject)?.project.name}
+        onJumpToTask={(projectId, taskId) => {
+          setIsAnnotationDigestOpen(false);
+          handleJumpToProjectTask(projectId, taskId);
+        }}
+        onDeleteAnnotation={handleDeleteAnnotation}
       />
 
       {/* Floating Background Building Task Widget */}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { IconBook, IconUpload, IconEdit, IconSparkles, IconTrash, IconClose, IconFileText, IconLayers } from '../Icons.js';
+import { useFeedback } from '../FeedbackProvider.js';
 
 export interface UserDocumentSummary {
   id: string;
@@ -32,6 +33,7 @@ export const DocumentManagerModal: React.FC<DocumentManagerModalProps> = ({
   onGenerateRoadmap,
 }) => {
   const [documents, setDocuments] = useState<UserDocumentSummary[]>([]);
+  const { toast, confirm } = useFeedback();
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -450,14 +452,22 @@ export const DocumentManagerModal: React.FC<DocumentManagerModalProps> = ({
   };
 
   const handleDelete = async (docId: string, title: string) => {
-    if (!confirm(`确认删除学习资料《${title}》吗？`)) return;
+    const ok = await confirm({
+      title: '删除学习资料',
+      message: `确认删除学习资料《${title}》吗？删除后将无法继续用于章节 RAG 检索。`,
+      confirmText: '确认删除',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/documents/${docId}`, { method: 'DELETE' });
       if (res.ok) {
         setDocuments(prev => prev.filter(d => d.id !== docId));
+        toast.success(`已删除《${title}》`);
       }
     } catch (err) {
       console.error('Delete document failed:', err);
+      toast.error('删除资料失败，请重试');
     }
   };
 

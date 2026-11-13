@@ -27,6 +27,7 @@ import { getItem, removeItem, setItem, STORAGE_KEYS } from '../utils/storage.js'
 import TagBadge from './TagBadge.js';
 import TagSelector from './TagSelector.js';
 import { IconTree, IconCheck, IconLightning, IconPlus, IconClose, IconChevronRight, IconChevronLeft } from './Icons.js';
+import { useFeedback } from './FeedbackProvider.js';
 
 // ─── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -881,6 +882,7 @@ export default function DependencyViewsPanel({
   onCreateTask,
   onSelectTask,
 }: DependencyViewsPanelProps) {
+  const { toast, confirm } = useFeedback();
   const [graphs, setGraphs] = useState<GraphSummary[]>([]);
   const [selectedGraphId, setSelectedGraphId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<DependencyView | null>(null);
@@ -1253,7 +1255,7 @@ export default function DependencyViewsPanel({
       };
       const nextView = normalizeDependencyView(payload.data);
       if (!res.ok || !payload.success || !nextView) {
-        alert(payload.error ?? 'Failed to delete edge');
+        toast.error(payload.error ?? '移除依赖连线失败');
         return;
       }
       setCurrentView(nextView);
@@ -1261,7 +1263,7 @@ export default function DependencyViewsPanel({
     } finally {
       setIsUpdatingEdge(false);
     }
-  }, []);
+  }, [toast]);
 
   const handleReverseEdge = useCallback(async (edgeId: string) => {
     const pid = projectIdRef.current;
@@ -1286,7 +1288,7 @@ export default function DependencyViewsPanel({
       };
       const nextView = normalizeDependencyView(updatePayload.data);
       if (!updateRes.ok || !updatePayload.success || !nextView) {
-        alert(updatePayload.error ?? 'Failed to reverse edge');
+        toast.error(updatePayload.error ?? '反转依赖方向失败');
         return;
       }
 
@@ -1295,7 +1297,7 @@ export default function DependencyViewsPanel({
     } finally {
       setIsUpdatingEdge(false);
     }
-  }, [currentView]);
+  }, [currentView, toast]);
 
   useEffect(() => {
     syncGraphSummary(currentView);
@@ -1432,7 +1434,7 @@ export default function DependencyViewsPanel({
   const handleExportImage = useCallback(async () => {
     const viewport = reactFlowWrapperRef.current?.querySelector('.react-flow__viewport');
     if (!(viewport instanceof HTMLElement)) {
-      alert('Graph canvas is not ready to export yet.');
+      toast.error('图谱画布尚未就绪，请稍后再试');
       return;
     }
 
@@ -1458,13 +1460,14 @@ export default function DependencyViewsPanel({
       downloadLink.download = `${exportName}.png`;
       downloadLink.href = dataUrl;
       downloadLink.click();
+      toast.success('知识拓扑图已导出为高清 PNG');
     } catch (error) {
       console.error('Failed to export graph image:', error);
-      alert('Failed to export graph image. Please try again.');
+      toast.error('导出拓扑图失败，请重试');
     } finally {
       setIsExportingImage(false);
     }
-  }, [currentView?.name]);
+  }, [currentView?.name, toast]);
 
   const handleToggleFullscreen = useCallback(async () => {
     const wrapper = reactFlowWrapperRef.current;
@@ -1515,7 +1518,14 @@ export default function DependencyViewsPanel({
   // Delete graph
   const handleDeleteGraph = useCallback(async (graphId: string) => {
     const pid = projectIdRef.current;
-    if (!pid || !confirm('Delete this dependency graph? This cannot be undone.')) return;
+    if (!pid) return;
+    const ok = await confirm({
+      title: '删除拓扑图视图',
+      message: '确认删除该知识拓扑图视图吗？视图中的连线布局将永久移除（知识点讲义本身保留）。',
+      confirmText: '确认删除',
+      danger: true,
+    });
+    if (!ok) return;
     const res = await fetch(`/api/projects/${pid}/dependency-views/${graphId}`, { method: 'DELETE' });
     if (res.ok) {
       const updated = graphs.filter((g) => g.id !== graphId);
@@ -1524,8 +1534,9 @@ export default function DependencyViewsPanel({
       if (selectedGraphId === graphId) {
         setSelectedGraphId(updated.length > 0 ? updated[0].id : null);
       }
+      toast.success('已删除拓扑图视图');
     }
-  }, [graphs, onGraphsChange, selectedGraphId]);
+  }, [graphs, onGraphsChange, selectedGraphId, confirm, toast]);
 
   // Add task to graph (optionally with a successor edge)
   // Add tasks to graph (batch; optionally all as successors of addTaskSuccessorId)
@@ -1545,7 +1556,7 @@ export default function DependencyViewsPanel({
         data: DependencyView | DependencyViewMutationResponse;
         error?: string;
       };
-      if (!addPayload.success) { alert(addPayload.error ?? `Failed to add task ${taskId}`); continue; }
+      if (!addPayload.success) { toast.error(addPayload.error ?? `添加节点 ${taskId} 失败`); continue; }
       updatedView = normalizeDependencyView(addPayload.data);
       if (addTaskSuccessorId) {
         const edgeRes = await fetch(`/api/projects/${pid}/dependency-views/${gid}/edges`, {
