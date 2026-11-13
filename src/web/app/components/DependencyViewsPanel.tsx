@@ -28,6 +28,8 @@ import TagBadge from './TagBadge.js';
 import TagSelector from './TagSelector.js';
 import { IconTree, IconCheck, IconLightning, IconPlus, IconClose, IconChevronRight, IconChevronLeft } from './Icons.js';
 import { useFeedback } from './FeedbackProvider.js';
+import { BranchHorizonView } from './BranchHorizonView.js';
+import { SolarObservatoryView } from './SolarObservatoryView.js';
 
 // ─── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -905,6 +907,8 @@ export default function DependencyViewsPanel({
   const [selectedAddTaskIds, setSelectedAddTaskIds] = useState<string[]>([]);
   const [hideCompletedInAdd, setHideCompletedInAdd] = useState(true);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [graphViewMode, setGraphViewMode] = useState<'horizon' | 'solar' | 'editor'>('horizon');
+  const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
   const [isUpdatingEdge, setIsUpdatingEdge] = useState(false);
   const [updatingTaskIds, setUpdatingTaskIds] = useState<Set<string>>(() => new Set());
   const [isGraphListCollapsed, setIsGraphListCollapsed] = useState(
@@ -945,6 +949,14 @@ export default function DependencyViewsPanel({
   const tagMap = useMemo(
     () => Object.fromEntries(tags.map((tag) => [tag.id, tag])),
     [tags]
+  );
+  const viewNodeTaskIds = useMemo(
+    () => (currentView?.nodes ?? []).map((node) => node.taskId),
+    [currentView]
+  );
+  const viewEdges = useMemo(
+    () => currentView?.edges ?? [],
+    [currentView]
   );
 
   // Load graphs when projectId changes
@@ -1179,6 +1191,7 @@ export default function DependencyViewsPanel({
     setNewGraphName('');
     setNewGraphDesc('');
     setSelectedEdgeId(null);
+    setFocusTaskId(null);
     setIsUpdatingEdge(false);
     setUpdatingTaskIds(new Set());
   }, [projectId, selectedGraphId, handleCloseQuickCreateTask, resetAddTaskState]);
@@ -1705,7 +1718,7 @@ export default function DependencyViewsPanel({
       </aside>
 
       {/* Main Canvas */}
-      <div ref={reactFlowWrapperRef} className={`relative flex-1 h-full overflow-hidden bg-zinc-950/60 ${isCanvasFullscreen ? 'h-screen w-screen rounded-none border-0 shadow-none' : 'rounded-2xl border border-zinc-800/80 shadow-inner'}`}>
+      <div ref={reactFlowWrapperRef} className={`relative flex-1 h-full flex flex-col overflow-hidden bg-[#09090d]/90 ${isCanvasFullscreen ? 'h-screen w-screen rounded-none border-0 shadow-none' : 'rounded-2xl border border-zinc-800/80 shadow-inner'}`}>
         {!selectedGraphId ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-zinc-500">
@@ -1724,14 +1737,15 @@ export default function DependencyViewsPanel({
           </div>
         ) : (
           <>
-            {/* Toolbar overlay */}
-             <div className="absolute top-3 left-3 z-10 flex flex-wrap items-center gap-1.5 sm:gap-2 bg-zinc-900/90 backdrop-blur-xl p-1.5 rounded-xl border border-zinc-800/90 shadow-2xl max-w-[calc(100%-1.5rem)]">
+            {/* Top Mode & Action Bar */}
+            <div className="shrink-0 z-20 flex flex-wrap items-center justify-between gap-2 px-2.5 sm:px-3.5 py-2 bg-zinc-950/90 backdrop-blur-xl border-b border-zinc-800/80">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
                 {graphs.length > 0 && (
                   <div className="lg:hidden flex items-center">
                     <select
                       value={selectedGraphId || ''}
                       onChange={(e) => setSelectedGraphId(e.target.value)}
-                      className="bg-zinc-950 text-amber-300 border border-amber-500/40 rounded-lg px-2 py-1.5 text-xs font-bold focus:outline-none max-w-[130px] sm:max-w-[180px] truncate"
+                      className="bg-zinc-900 text-amber-300 border border-amber-500/40 rounded-lg px-2 py-1.5 text-xs font-bold focus:outline-none max-w-[125px] sm:max-w-[180px] truncate"
                     >
                       {graphs.map(g => (
                         <option key={g.id} value={g.id}>{g.name}</option>
@@ -1742,11 +1756,65 @@ export default function DependencyViewsPanel({
                 <button
                   type="button"
                   onClick={() => setIsCreateGraphOpen(true)}
-                  className="lg:hidden flex items-center justify-center w-8 h-8 bg-amber-500/20 text-amber-300 rounded-lg border border-amber-500/40 text-xs font-black active:scale-95"
+                  className="lg:hidden flex items-center justify-center w-8 h-8 bg-amber-500/15 text-amber-300 rounded-lg border border-amber-500/40 text-xs font-black active:scale-95"
                   title="新建图谱"
                 >
                   <IconPlus className="w-3.5 h-3.5" />
                 </button>
+
+                <div
+                  className="inline-flex items-center p-0.5 rounded-xl bg-zinc-900/95 border border-zinc-800/90 shadow-inner"
+                  role="tablist"
+                  aria-label="学习图谱视图模式"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={graphViewMode === 'horizon'}
+                    onClick={() => setGraphViewMode('horizon')}
+                    className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                      graphViewMode === 'horizon'
+                        ? 'bg-gradient-to-r from-amber-500/25 to-orange-500/20 text-amber-200 border border-amber-500/40 shadow-[0_0_16px_rgba(245,158,11,0.18)]'
+                        : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
+                    }`}
+                  >
+                    <span>🧭</span>
+                    <span>分岔学习</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={graphViewMode === 'solar'}
+                    onClick={() => setGraphViewMode('solar')}
+                    className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                      graphViewMode === 'solar'
+                        ? 'bg-gradient-to-r from-sky-500/25 to-indigo-500/25 text-sky-200 border border-sky-400/40 shadow-[0_0_18px_rgba(56,189,248,0.22)]'
+                        : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
+                    }`}
+                  >
+                    <span>🌌</span>
+                    <span>星图总览</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={graphViewMode === 'editor'}
+                    onClick={() => setGraphViewMode('editor')}
+                    className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                      graphViewMode === 'editor'
+                        ? 'bg-zinc-800 text-zinc-100 border border-zinc-600/80 shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
+                    }`}
+                    title="拓扑连线编辑器"
+                  >
+                    <span>⚙️</span>
+                    <span className="hidden sm:inline">连线编辑</span>
+                    <span className="sm:hidden">连线</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -1755,29 +1823,78 @@ export default function DependencyViewsPanel({
                     setHideCompletedInAdd(true);
                     setIsAddTaskOpen(true);
                   }}
-                  className="flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-zinc-800 hover:bg-zinc-750 text-amber-300 rounded-lg text-xs font-bold border border-amber-500/30 active:scale-95 transition-all shadow-sm"
+                  className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 bg-zinc-800 hover:bg-zinc-750 text-amber-300 rounded-lg text-xs font-bold border border-amber-500/30 active:scale-95 transition-all shadow-sm cursor-pointer"
                 >
                   <IconPlus className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">添加模块</span>
                   <span className="sm:hidden">加模块</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => void handleExportImage()}
-                  disabled={isExportingImage || nodes.length === 0}
-                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 rounded-lg text-xs font-bold border border-zinc-700 active:scale-95 transition-all disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <span>导出图片</span>
-                </button>
+                {graphViewMode === 'editor' && (
+                  <button
+                    type="button"
+                    onClick={() => void handleExportImage()}
+                    disabled={isExportingImage || nodes.length === 0}
+                    className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 rounded-lg text-xs font-bold border border-zinc-700 active:scale-95 transition-all disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                  >
+                    <span>导出图片</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => void handleToggleFullscreen()}
-                  className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 rounded-lg text-xs font-bold border border-zinc-700 active:scale-95 transition-all"
-                  title={isCanvasFullscreen ? '退出全屏' : '全屏查看拓扑图'}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 rounded-lg text-xs font-bold border border-zinc-700 active:scale-95 transition-all cursor-pointer"
+                  title={isCanvasFullscreen ? '退出全屏' : '全屏查看'}
                 >
                   <span>{isCanvasFullscreen ? '退出' : '全屏'}</span>
                 </button>
-               </div>
+              </div>
+            </div>
+
+            <div className="flex-1 relative min-h-0 overflow-hidden">
+              {graphViewMode === 'horizon' && (
+                <BranchHorizonView
+                  graphName={currentView?.name}
+                  tasks={tasks}
+                  nodeTaskIds={viewNodeTaskIds}
+                  edges={viewEdges}
+                  tagMap={tagMap}
+                  focusTaskId={focusTaskId}
+                  onFocusTaskChange={setFocusTaskId}
+                  onOpenCockpit={(taskId) => onSelectTask?.(taskId)}
+                  onStatusChange={handleTaskStatusChange}
+                  onOpenSolarMap={() => setGraphViewMode('solar')}
+                  onOpenAddNode={(predecessorId) => {
+                    setAddTaskSuccessorId(predecessorId ?? null);
+                    setSelectedAddTaskIds([]);
+                    setHideCompletedInAdd(true);
+                    setIsAddTaskOpen(true);
+                  }}
+                />
+              )}
+
+              {graphViewMode === 'solar' && (
+                <SolarObservatoryView
+                  graphName={currentView?.name}
+                  tasks={tasks}
+                  nodeTaskIds={viewNodeTaskIds}
+                  edges={viewEdges}
+                  focusTaskId={focusTaskId}
+                  onWarpToBranch={(taskId) => {
+                    setFocusTaskId(taskId);
+                    setGraphViewMode('horizon');
+                  }}
+                  onOpenCockpit={(taskId) => onSelectTask?.(taskId)}
+                  onOpenAddNode={() => {
+                    setAddTaskSuccessorId(null);
+                    setSelectedAddTaskIds([]);
+                    setHideCompletedInAdd(true);
+                    setIsAddTaskOpen(true);
+                  }}
+                />
+              )}
+
+              {graphViewMode === 'editor' && (
+                <>
 
              <div className={`z-10 rounded-2xl border border-zinc-800/90 bg-zinc-900/95 p-3.5 shadow-2xl backdrop-blur-xl text-zinc-100 transition-all animate-slideUp ${
                selectedEdge
@@ -1861,6 +1978,9 @@ export default function DependencyViewsPanel({
                 </div>
               </div>
             )}
+                </>
+              )}
+            </div>
           </>
         )}
       </div>
