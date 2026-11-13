@@ -129,11 +129,11 @@ const GRAPH_MOTION_STYLES = `
   @keyframes dependency-ready-glow {
     0%,
     100% {
-      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.12), 0 16px 36px rgba(15, 23, 42, 0.12);
+      box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.16), 0 16px 36px rgba(0, 0, 0, 0.45);
     }
 
     50% {
-      box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.1), 0 22px 44px rgba(16, 185, 129, 0.2);
+      box-shadow: 0 0 0 8px rgba(245, 158, 11, 0.10), 0 22px 44px rgba(245, 158, 11, 0.24);
     }
   }
 
@@ -142,7 +142,15 @@ const GRAPH_MOTION_STYLES = `
   }
 
   .dependency-ready-card {
-    animation: dependency-ready-glow 1.8s ease-in-out infinite;
+    animation: dependency-ready-glow 2s ease-in-out infinite;
+  }
+
+  .react-flow__node-taskNode {
+    transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), filter 0.24s ease;
+  }
+  .react-flow__node-taskNode:hover {
+    filter: drop-shadow(0 12px 24px rgba(245, 158, 11, 0.18));
+    z-index: 20 !important;
   }
 `;
 
@@ -1604,10 +1612,10 @@ export default function DependencyViewsPanel({
   return (
     <div className="flex h-full min-h-0 gap-4">
 
-      {/* Sidebar */}
+      {/* Sidebar (>= lg: Tablet Landscape & Desktop) */}
       <aside
-        className={`hidden md:flex flex-shrink-0 p-4 flex-col overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/60 shadow-xl backdrop-blur-xl transition-all duration-300 ${
-          isGraphListCollapsed ? 'w-20' : isCompact ? 'w-48' : 'w-56'
+        className={`hidden lg:flex flex-shrink-0 p-3.5 xl:p-4 flex-col overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/60 shadow-xl backdrop-blur-xl transition-all duration-300 ${
+          isGraphListCollapsed ? 'w-20' : isCompact ? 'w-48' : 'w-52 xl:w-56'
         }`}
       >
         <div className="flex items-center justify-between mb-4">
@@ -1717,13 +1725,13 @@ export default function DependencyViewsPanel({
         ) : (
           <>
             {/* Toolbar overlay */}
-             <div className="absolute top-3 left-3 z-10 flex flex-wrap items-center gap-1.5 sm:gap-2 bg-zinc-900/90 backdrop-blur-md p-1 sm:p-1.5 rounded-xl border border-zinc-800 shadow-xl max-w-[calc(100%-1.5rem)]">
+             <div className="absolute top-3 left-3 z-10 flex flex-wrap items-center gap-1.5 sm:gap-2 bg-zinc-900/90 backdrop-blur-xl p-1.5 rounded-xl border border-zinc-800/90 shadow-2xl max-w-[calc(100%-1.5rem)]">
                 {graphs.length > 0 && (
-                  <div className="md:hidden flex items-center">
+                  <div className="lg:hidden flex items-center">
                     <select
                       value={selectedGraphId || ''}
                       onChange={(e) => setSelectedGraphId(e.target.value)}
-                      className="bg-zinc-950 text-amber-300 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none max-w-[110px] truncate"
+                      className="bg-zinc-950 text-amber-300 border border-amber-500/40 rounded-lg px-2 py-1.5 text-xs font-bold focus:outline-none max-w-[130px] sm:max-w-[180px] truncate"
                     >
                       {graphs.map(g => (
                         <option key={g.id} value={g.id}>{g.name}</option>
@@ -1734,7 +1742,7 @@ export default function DependencyViewsPanel({
                 <button
                   type="button"
                   onClick={() => setIsCreateGraphOpen(true)}
-                  className="md:hidden flex items-center justify-center w-7 h-7 bg-amber-500/20 text-amber-300 rounded-lg border border-amber-500/40 text-xs font-black"
+                  className="lg:hidden flex items-center justify-center w-8 h-8 bg-amber-500/20 text-amber-300 rounded-lg border border-amber-500/40 text-xs font-black active:scale-95"
                   title="新建图谱"
                 >
                   <IconPlus className="w-3.5 h-3.5" />
@@ -1771,8 +1779,10 @@ export default function DependencyViewsPanel({
                 </button>
                </div>
 
-             <div className={`absolute top-3 right-3 z-10 rounded-2xl border border-zinc-800 bg-zinc-900/95 p-3.5 shadow-2xl backdrop-blur-md text-zinc-100 ${
-               selectedEdge ? 'block w-72' : 'hidden md:block ' + (isCompact ? 'w-64' : 'w-72')
+             <div className={`z-10 rounded-2xl border border-zinc-800/90 bg-zinc-900/95 p-3.5 shadow-2xl backdrop-blur-xl text-zinc-100 transition-all animate-slideUp ${
+               selectedEdge
+                 ? 'fixed bottom-20 left-3 right-3 sm:absolute sm:bottom-auto sm:left-auto sm:top-3 sm:right-3 sm:w-72 block'
+                 : 'hidden xl:block absolute top-3 right-3 ' + (isCompact ? 'w-60' : 'w-68')
              }`}>
                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">节点关联与连线</p>
                {selectedEdge && selectedEdgeLabel ? (
@@ -1829,23 +1839,25 @@ export default function DependencyViewsPanel({
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
               nodesDraggable={false}
+              panOnDrag={true}
+              zoomOnPinch={true}
               fitView
-              fitViewOptions={{ padding: 0.2 }}
+              fitViewOptions={{ padding: 0.22 }}
               minZoom={0.2}
               maxZoom={2}
               deleteKeyCode="Delete"
             >
               <style>{GRAPH_MOTION_STYLES}</style>
-              <Background gap={24} color="#e2e8f0" />
-              <Controls className="!rounded-xl !shadow-md !border-0 !bg-white" />
+              <Background gap={26} size={1.2} color="#3f3f46" />
+              <Controls showInteractive={false} />
             </ReactFlow>
 
             {nodes.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="text-center">
-                  <div className="text-4xl mb-3">✨</div>
-                  <p className="text-sm font-semibold text-slate-500">当前图谱中暂无学习节点</p>
-                  <p className="text-xs text-slate-400 mt-1">点击上方「+ 添加模块」即可创建新节点</p>
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none px-4">
+                <div className="text-center bg-zinc-900/75 border border-zinc-800/80 px-6 py-5 rounded-2xl backdrop-blur-md shadow-xl">
+                  <div className="text-3xl mb-2">✨</div>
+                  <p className="text-sm font-bold text-zinc-200">当前图谱中暂无学习节点</p>
+                  <p className="text-xs text-zinc-400 mt-1">点击左上角「+ 添加模块」即可快速挂载知识点</p>
                 </div>
               </div>
             )}

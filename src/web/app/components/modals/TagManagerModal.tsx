@@ -127,12 +127,12 @@ const TagManagerModal: React.FC<TagManagerModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn"
+      className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-slideUp border border-zinc-750 text-zinc-100">
+      <div className="bg-zinc-900 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-lg max-h-[92dvh] pb-safe flex flex-col overflow-hidden animate-sheet-mobile border border-zinc-750 text-zinc-100">
         {/* Header */}
         <div className="px-6 py-5 border-b border-zinc-800 flex justify-between items-center bg-zinc-950/60">
           <div className="flex items-center gap-2.5">

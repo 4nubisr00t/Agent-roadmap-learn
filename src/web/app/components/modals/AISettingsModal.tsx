@@ -337,14 +337,14 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
 
   return (
     <div
-      className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 p-2 sm:p-4 animate-fadeIn"
+      className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
         }
       }}
     >
-      <div className="bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden border border-zinc-800 gold-border-hover animate-slideUp flex flex-col max-h-[96vh] sm:max-h-[90vh]">
+      <div className="bg-zinc-900 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden border border-zinc-800 gold-border-hover animate-sheet-mobile flex flex-col max-h-[92dvh] pb-safe">
         {/* Header */}
         <div className="p-3.5 sm:p-5 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
           <div className="flex items-center gap-3">

@@ -2,7 +2,8 @@
 <html lang="zh-CN" class="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#09090b">
     <title>智学工坊 | 专属成长进阶与知识库平台</title>
     <!-- KaTeX Mathematical Typography CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
@@ -56,14 +57,68 @@
             font-family: 'JetBrains Mono', monospace;
         }
 
-        /* Obsidian Titanium Mesh Grid */
+        /* Obsidian Titanium Mesh Grid + Ambient Aurora */
         .roadmap-grid {
             background-color: #09090b;
             background-image: 
                 radial-gradient(rgba(245, 158, 11, 0.08) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(9, 9, 11, 0.7), #09090b);
-            background-size: 28px 28px, 100% 100%;
+                radial-gradient(ellipse 80% 50% at 50% -10%, rgba(245, 158, 11, 0.10), transparent 70%),
+                linear-gradient(to bottom, rgba(9, 9, 11, 0.65), #09090b);
+            background-size: 28px 28px, 100% 100%, 100% 100%;
             background-attachment: fixed;
+        }
+
+        .aurora-layer {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+        .aurora-orb-1 {
+            position: absolute;
+            top: -12%;
+            left: -8%;
+            width: 46vw;
+            height: 46vw;
+            min-width: 280px;
+            min-height: 280px;
+            border-radius: 9999px;
+            background: radial-gradient(circle, rgba(245, 158, 11, 0.13) 0%, rgba(245, 158, 11, 0.03) 45%, transparent 72%);
+            filter: blur(42px);
+            animation: nebulaDriftA 18s ease-in-out infinite alternate;
+            will-change: transform;
+        }
+        .aurora-orb-2 {
+            position: absolute;
+            bottom: -15%;
+            right: -10%;
+            width: 44vw;
+            height: 44vw;
+            min-width: 260px;
+            min-height: 260px;
+            border-radius: 9999px;
+            background: radial-gradient(circle, rgba(16, 185, 129, 0.09) 0%, rgba(245, 158, 11, 0.05) 42%, transparent 72%);
+            filter: blur(48px);
+            animation: nebulaDriftB 22s ease-in-out infinite alternate;
+            will-change: transform;
+        }
+        @keyframes nebulaDriftA {
+            0% { transform: translate3d(0, 0, 0) scale(1); }
+            100% { transform: translate3d(6vw, 4vh, 0) scale(1.12); }
+        }
+        @keyframes nebulaDriftB {
+            0% { transform: translate3d(0, 0, 0) scale(1.05); }
+            100% { transform: translate3d(-5vw, -5vh, 0) scale(0.95); }
+        }
+
+        /* Safe area & touch ergonomics */
+        .pb-safe {
+            padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+        }
+        button, a, [role="button"] {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
 
         /* Custom Black Gold Scrollbars */
@@ -86,27 +141,75 @@
 
         /* Button & Card Micro-Interactions */
         button, a, input, select, textarea {
-            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+                        background-color 0.2s ease,
+                        border-color 0.2s ease,
+                        color 0.2s ease,
+                        box-shadow 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+                        opacity 0.2s ease;
         }
         button:active:not(:disabled) {
-            transform: scale(0.97);
+            transform: scale(0.96);
+        }
+
+        /* Flagship CTA Metallic Shimmer */
+        .btn-shimmer-gold {
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-shimmer-gold::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -120%;
+            width: 75%;
+            height: 100%;
+            background: linear-gradient(105deg, transparent 20%, rgba(255, 255, 255, 0.38) 50%, transparent 80%);
+            transform: skewX(-20deg);
+            animation: ctaShimmer 4.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+            pointer-events: none;
+        }
+        @keyframes ctaShimmer {
+            0%, 55% { left: -120%; }
+            100% { left: 150%; }
+        }
+
+        /* Progress Luminous Beam */
+        .progress-beam {
+            position: relative;
+            overflow: hidden;
+        }
+        .progress-beam::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+            transform: translateX(-100%);
+            animation: progressSweep 2.6s ease-in-out infinite;
+        }
+        @keyframes progressSweep {
+            0% { transform: translateX(-100%); }
+            60%, 100% { transform: translateX(160%); }
         }
 
         /* Ambient Glow & Leather Edge Shadows */
         .gold-glow {
-            box-shadow: 0 0 25px -5px rgba(245, 158, 11, 0.15), 0 0 10px -5px rgba(245, 158, 11, 0.1);
+            box-shadow: 0 0 28px -4px rgba(245, 158, 11, 0.22), 0 0 12px -4px rgba(245, 158, 11, 0.14);
         }
         .leather-card {
-            background: linear-gradient(145deg, rgba(24, 24, 27, 0.85) 0%, rgba(18, 18, 21, 0.95) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.07);
-            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            background: linear-gradient(145deg, rgba(26, 26, 30, 0.88) 0%, rgba(16, 16, 20, 0.96) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        }
+        .leather-card:hover {
+            box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.85), 0 0 24px -8px rgba(245, 158, 11, 0.18), inset 0 1px 0 rgba(245, 158, 11, 0.15);
         }
         .gold-border {
             border: 1px solid rgba(245, 158, 11, 0.25);
         }
         .gold-border-hover:hover {
-            border-color: rgba(245, 158, 11, 0.5);
-            box-shadow: 0 0 15px rgba(245, 158, 11, 0.12);
+            border-color: rgba(245, 158, 11, 0.52);
+            box-shadow: 0 0 22px rgba(245, 158, 11, 0.14);
         }
 
         @keyframes fadeIn {
@@ -114,14 +217,75 @@
             to { opacity: 1; }
         }
         @keyframes slideUp {
-            from { opacity: 0; transform: translateY(16px) scale(0.98); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
+            0% { opacity: 0; transform: translate3d(0, 20px, 0) scale(0.96); }
+            70% { opacity: 1; transform: translate3d(0, -2px, 0) scale(1.005); }
+            100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+        }
+        @keyframes sheetUp {
+            0% { opacity: 0; transform: translate3d(0, 100%, 0); }
+            100% { opacity: 1; transform: translate3d(0, 0, 0); }
+        }
+        @keyframes slideRight {
+            0% { opacity: 0; transform: translate3d(-28px, 0, 0); }
+            100% { opacity: 1; transform: translate3d(0, 0, 0); }
+        }
+        @keyframes staggerFadeUp {
+            0% { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.98); }
+            100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
         }
         .animate-fadeIn {
-            animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            animation: fadeIn 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
         }
         .animate-slideUp {
-            animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            animation: slideUp 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .animate-slideRight {
+            animation: slideRight 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .animate-stagger {
+            animation: staggerFadeUp 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        @media (max-width: 639px) {
+            .animate-sheet-mobile {
+                animation: sheetUp 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+            }
+        }
+        @media (min-width: 640px) {
+            .animate-sheet-mobile {
+                animation: slideUp 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+            }
+        }
+
+        /* ReactFlow Obsidian Theme Controls Override */
+        .react-flow__controls {
+            background: rgba(18, 18, 22, 0.88) !important;
+            border: 1px solid rgba(245, 158, 11, 0.22) !important;
+            border-radius: 0.85rem !important;
+            backdrop-filter: blur(12px);
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important;
+        }
+        .react-flow__controls-button {
+            background: transparent !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+            fill: #d4d4d8 !important;
+            color: #d4d4d8 !important;
+            width: 32px !important;
+            height: 32px !important;
+        }
+        .react-flow__controls-button:hover {
+            background: rgba(245, 158, 11, 0.15) !important;
+            fill: #fcd34d !important;
+        }
+        @media (max-width: 767px) {
+            .react-flow__controls {
+                margin-bottom: 4.5rem !important;
+            }
+            .courseware-content h1 { font-size: 1.25rem; }
+            .courseware-content h2 { font-size: 1.1rem; }
+            .courseware-content p, .courseware-content li { font-size: 0.88rem; line-height: 1.72; }
+            .courseware-content pre { padding: 0.85rem; font-size: 0.78rem; }
+            .courseware-content table { display: block; overflow-x: auto; white-space: nowrap; }
         }
 
         /* Dark Gold Luxury Courseware Typography */
@@ -280,8 +444,12 @@
         }
     </style>
 </head>
-<body class="roadmap-grid min-h-screen">
-    <div id="root"></div>
+<body class="roadmap-grid min-h-[100dvh] selection:bg-amber-500/30 selection:text-amber-100">
+    <div class="aurora-layer" aria-hidden="true">
+        <div class="aurora-orb-1"></div>
+        <div class="aurora-orb-2"></div>
+    </div>
+    <div id="root" class="relative z-10"></div>
     <script type="module" src="/main.tsx"></script>
 </body>
 </html>

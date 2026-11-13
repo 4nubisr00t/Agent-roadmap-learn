@@ -1672,19 +1672,19 @@ const App: React.FC = () => {
         onClick={() => handleEditTask(task)}
         onDragStart={(e) => handleDragStart(e, task.id)}
         onDragEnd={() => setDraggedTask(null)}
-        className={`bg-zinc-900/90 rounded-2xl border border-zinc-800/80 cursor-pointer transition-all duration-200 ease-out group flex flex-col hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/5 ${
+        className={`leather-card rounded-2xl cursor-pointer transition-all duration-200 ease-out group flex flex-col hover:border-amber-500/45 ${
           isDragging
             ? 'shadow-2xl scale-105 border-amber-400 rotate-1 z-10'
-            : 'shadow-sm hover:-translate-y-0.5'
+            : 'hover:-translate-y-0.5'
         } ${
-          cardMode === 'compact' ? 'p-3' : 'p-5'
+          cardMode === 'compact' ? 'p-3' : 'p-4 sm:p-5'
         }`}
       >
         <div className="flex justify-between items-start mb-1.5">
           <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg ${priority.bgColor} ${priority.color}`}>
             {priority.label}
           </span>
-          <div className={`relative flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all ${cardMode === 'compact' ? 'scale-90' : ''}`}>
+          <div className={`relative flex items-center gap-1 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-all ${cardMode === 'compact' ? 'scale-90' : ''}`}>
             {selectedProject === project.id && graphViews.length > 0 && (
               <>
                 <button
@@ -1852,65 +1852,53 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-transparent p-2 sm:p-6 text-zinc-100">
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-transparent p-2 sm:p-4 xl:p-5 text-zinc-100">
       {/* Mobile Top Header (< md) */}
-      <header className="md:hidden mb-4 bg-zinc-900/90 backdrop-blur-xl p-3 rounded-2xl border border-zinc-800 shadow-xl flex flex-col gap-2.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+      <header className="md:hidden flex-shrink-0 mb-2.5 bg-zinc-900/85 backdrop-blur-2xl p-3 rounded-2xl border border-zinc-800/90 shadow-2xl flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
               onClick={() => setIsMobileDrawerOpen(true)}
-              className="w-9 h-9 rounded-xl bg-zinc-800 border border-zinc-700 text-amber-400 flex items-center justify-center active:scale-90 transition-all shadow-sm"
-              title="打开控制面板"
+              className="w-9 h-9 rounded-xl bg-zinc-850 border border-zinc-700/80 text-amber-400 flex items-center justify-center active:scale-90 transition-all shadow-sm flex-shrink-0"
+              title="打开课程与工具抽屉"
             >
               <IconMenu className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-zinc-950 font-black shadow-md shadow-amber-500/20">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-zinc-950 font-black shadow-md shadow-amber-500/20 flex-shrink-0">
                 <IconLightning className="w-4 h-4 text-zinc-950" />
               </div>
-              <span className="text-base font-black text-zinc-100 tracking-tight">
+              <span className="text-base font-black text-zinc-100 tracking-tight truncate">
                 智学<span className="text-amber-400">工坊</span>
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* View Mode Switch */}
-            <div className="flex bg-zinc-950 border border-zinc-800 rounded-xl p-0.5 shadow-inner">
-              <button
-                type="button"
-                onClick={() => setWorkspaceMode('dependency')}
-                disabled={!selectedProject}
-                className={`p-1.5 rounded-lg transition-all ${
-                  workspaceMode === 'dependency'
-                    ? 'bg-amber-400 text-zinc-950 font-black shadow-sm'
-                    : 'text-zinc-400'
-                } disabled:opacity-30`}
-                title="知识拓扑图"
-              >
-                <IconTree className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setWorkspaceMode('kanban')}
-                className={`p-1.5 rounded-lg transition-all ${
-                  workspaceMode === 'kanban'
-                    ? 'bg-amber-400 text-zinc-950 font-black shadow-sm'
-                    : 'text-zinc-400'
-                }`}
-                title="阶段看板"
-              >
-                <IconKanban className="w-4 h-4" />
-              </button>
-            </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsCommandPaletteOpen(true)}
+              className="w-8 h-8 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-amber-300 flex items-center justify-center active:scale-90 transition-all"
+              title="全局检索 (Ctrl+K)"
+            >
+              <IconSearch className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAISettingsOpen(true)}
+              className="w-8 h-8 rounded-xl bg-zinc-950 border border-zinc-800 text-amber-400 flex items-center justify-center active:scale-90 transition-all"
+              title="双 AI 引擎设置"
+            >
+              <IconSettings className="w-4 h-4" />
+            </button>
 
             {/* Quick User Avatar / Login */}
             {currentUser ? (
               <button
                 type="button"
                 onClick={() => setIsMobileDrawerOpen(true)}
-                className="w-8 h-8 rounded-xl bg-zinc-850 border border-amber-500/30 text-amber-300 font-black text-xs flex items-center justify-center shadow-sm"
+                className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-500/20 to-yellow-500/10 border border-amber-500/40 text-amber-300 font-black text-xs flex items-center justify-center shadow-sm"
                 title={currentUser.username}
               >
                 {currentUser.username.slice(0, 1).toUpperCase()}
@@ -1919,7 +1907,7 @@ const App: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsAuthModalOpen(true)}
-                className="px-2.5 py-1 bg-amber-500 text-zinc-950 text-xs font-black rounded-xl active:scale-95 shadow-sm"
+                className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 text-xs font-black rounded-xl active:scale-95 shadow-sm"
               >
                 登录
               </button>
@@ -1932,33 +1920,22 @@ const App: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsMobileDrawerOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-950 border border-amber-500/30 text-amber-300 font-bold max-w-[210px] truncate active:scale-95 transition-all shadow-inner"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-950 border border-amber-500/30 text-amber-300 font-bold max-w-[205px] truncate active:scale-95 transition-all shadow-inner"
           >
-            <span>🎯</span>
+            <IconLayers className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
             <span className="truncate">
               {projects.find(p => p.project.id === selectedProject)?.project.name || '全部技能树'}
             </span>
-            <span className="text-[10px] text-zinc-500">▾</span>
+            <span className="text-[10px] text-zinc-500 flex-shrink-0">▾</span>
           </button>
 
           <div className="flex items-center gap-2">
-            {recommendedContinueItem && (
-              <button
-                type="button"
-                onClick={handleContinueLearning}
-                className="px-2.5 py-1 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black rounded-lg text-[11px] flex items-center gap-1 active:scale-95 shadow-sm"
-                title={`继续学习：${recommendedContinueItem.task.title}`}
-              >
-                <span>▶</span>
-                <span>继续</span>
-              </button>
-            )}
             {totalTasksCount > 0 && (
               <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 font-medium">
                 <span>{doneTasksCount}/{totalTasksCount}</span>
-                <div className="w-14 h-1.5 bg-zinc-800 rounded-full overflow-hidden p-0.2">
+                <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden p-0.2">
                   <div
-                    className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full"
+                    className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full progress-beam"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
@@ -2188,6 +2165,55 @@ const App: React.FC = () => {
                     </button>
                   ))}
                 </div>
+
+                {/* Obsidian Sync & Backup Actions inside Drawer */}
+                <div className="pt-2 space-y-2">
+                  <button
+                    type="button"
+                    disabled={isSyncingVault || !selectedProject}
+                    onClick={() => {
+                      setIsMobileDrawerOpen(false);
+                      handleSyncCurrentProjectToObsidian();
+                    }}
+                    className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-center justify-between gap-2 disabled:opacity-40 active:scale-95 transition-all"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>💎</span>
+                      <span>{isSyncingVault ? '同步 Obsidian 中...' : 'Obsidian 全库同步'}</span>
+                    </span>
+                    {vaultStatus?.syncthingDetected && (
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    )}
+                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileDrawerOpen(false);
+                        handleExport();
+                      }}
+                      className="px-3 py-2 rounded-xl text-xs font-bold bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-amber-300 flex items-center justify-center gap-1.5 active:scale-95"
+                    >
+                      <IconUpload className="w-3.5 h-3.5 text-amber-400 rotate-180" />
+                      <span>导出备份</span>
+                    </button>
+                    <label className="px-3 py-2 rounded-xl text-xs font-bold bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-amber-300 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95">
+                      <IconUpload className="w-3.5 h-3.5 text-amber-400" />
+                      <span>导入备份</span>
+                      <input
+                        type="file"
+                        accept=".json,application/json"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleImport(file);
+                          e.target.value = '';
+                          setIsMobileDrawerOpen(false);
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -2223,25 +2249,37 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Desktop Header (>= md) */}
-      <header className="hidden md:flex mb-5 flex-wrap justify-between items-center gap-3 bg-zinc-900/80 backdrop-blur-xl px-5 py-3.5 rounded-2xl border border-zinc-800 shadow-2xl relative z-30">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-zinc-950 text-xl shadow-lg shadow-amber-500/20 font-black">
+      {/* Tablet & Desktop Header (>= md) */}
+      <header className="hidden md:flex flex-shrink-0 mb-3 lg:mb-4 flex-wrap justify-between items-center gap-2.5 xl:gap-3 bg-zinc-900/80 backdrop-blur-2xl px-4 xl:px-5 py-3 rounded-2xl border border-zinc-800/90 shadow-2xl relative z-30">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <button
+            type="button"
+            onClick={() => setIsMobileDrawerOpen(true)}
+            className="xl:hidden flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-zinc-950/90 border border-zinc-800 hover:border-amber-500/40 text-amber-300 font-bold text-xs active:scale-95 transition-all shadow-sm"
+            title="展开课程目录与工具抽屉"
+          >
+            <IconMenu className="w-4 h-4 text-amber-400" />
+            <span className="max-w-[115px] truncate">
+              {projects.find(p => p.project.id === selectedProject)?.project.name || '课程目录'}
+            </span>
+          </button>
+
+          <div className="w-9 h-9 xl:w-10 xl:h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-zinc-950 text-xl shadow-lg shadow-amber-500/20 font-black flex-shrink-0">
             <IconLightning className="w-5 h-5 text-zinc-950" />
           </div>
           <div>
-            <h1 className="text-xl font-black text-zinc-100 tracking-tight flex items-center gap-2">
+            <h1 className="text-lg xl:text-xl font-black text-zinc-100 tracking-tight flex items-center gap-2">
               智学<span className="text-amber-400">工坊</span>
-              <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
+              <span className="hidden lg:inline-block text-[11px] font-black px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
                 AgentLearn
               </span>
             </h1>
-            <p className="text-xs text-zinc-400 font-medium">AI 教材拆书 · 知识拓扑图谱 · 伴学精讲工作台</p>
+            <p className="hidden lg:block text-xs text-zinc-400 font-medium">AI 教材拆书 · 知识拓扑图谱 · 伴学精讲工作台</p>
           </div>
         </div>
 
         {totalTasksCount > 0 && (
-          <div className="flex items-center gap-3 bg-zinc-950/80 px-3.5 py-2 rounded-xl border border-zinc-800/80 shadow-inner">
+          <div className="hidden lg:flex items-center gap-3 bg-zinc-950/80 px-3.5 py-2 rounded-xl border border-zinc-800/80 shadow-inner">
             <div className="text-right">
               <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">掌握进度</div>
               <div className="text-xs font-black text-zinc-200">
@@ -2250,44 +2288,44 @@ const App: React.FC = () => {
             </div>
             <div className="w-24 h-2 bg-zinc-800 rounded-full overflow-hidden p-0.5">
               <div
-                className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full transition-all duration-700 shadow-sm shadow-amber-500/30"
+                className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full transition-all duration-700 shadow-sm shadow-amber-500/30 progress-beam"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
           </div>
         )}
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2 xl:gap-2.5 flex-nowrap">
           {recommendedContinueItem && (
             <button
               type="button"
               onClick={handleContinueLearning}
               title={`继续学习：${recommendedContinueItem.task.title}`}
-              className="px-3.5 py-1.5 text-xs font-black bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-105 text-zinc-950 rounded-xl shadow-md shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-1.5"
+              className="btn-shimmer-gold px-3 xl:px-3.5 py-1.5 text-xs font-black bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-105 text-zinc-950 rounded-xl shadow-lg shadow-amber-500/25 active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap"
             >
               <span>▶</span>
               <span>继续学习</span>
             </button>
           )}
 
-          <div className="flex bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-1 shadow-inner">
+          <div className="flex bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-1 shadow-inner whitespace-nowrap">
             <button
               type="button"
               onClick={() => setWorkspaceMode('dependency')}
               disabled={!selectedProject}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 active:scale-95 ${
+              className={`px-2.5 xl:px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 active:scale-95 ${
                 workspaceMode === 'dependency'
                   ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-md font-black'
                   : 'text-zinc-400 hover:text-zinc-200'
               } disabled:cursor-not-allowed disabled:opacity-40`}
             >
               <IconTree className="w-3.5 h-3.5" />
-              <span>知识拓扑图</span>
+              <span>拓扑图</span>
             </button>
             <button
               type="button"
               onClick={() => setWorkspaceMode('kanban')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 active:scale-95 ${
+              className={`px-2.5 xl:px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 active:scale-95 ${
                 workspaceMode === 'kanban'
                   ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 shadow-md font-black'
                   : 'text-zinc-400 hover:text-zinc-200'
@@ -2298,7 +2336,7 @@ const App: React.FC = () => {
             </button>
           </div>
 
-          <div className="flex bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-1">
+          <div className="hidden xl:flex bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-1 whitespace-nowrap">
             <button
               type="button"
               onClick={() => setCardMode('compact')}
@@ -2322,57 +2360,19 @@ const App: React.FC = () => {
               详细
             </button>
           </div>
-          {tags.length > 0 && (
-            <>
-              <div className="h-5 w-px bg-zinc-800" />
-               <TagFilter
-                 tags={tagsWithTaskCounts}
-                 selectedTags={selectedTagIds}
-                 onChange={setSelectedTagIds}
-               />
-            </>
-          )}
-          <div className="h-5 w-px bg-zinc-800" />
-          <div className="flex bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-1">
-            {([
-              { id: 'all', label: '全部' },
-              { id: 'active', label: '进行中' },
-              { id: 'completed', label: '已完成' },
-            ] as { id: StatusFilter; label: string }[]).map(f => (
-              <button
-                type="button"
-                key={f.id}
-                onClick={() => setStatusFilter(f.id)}
-                className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-95 ${
-                  statusFilter === f.id
-                    ? 'bg-zinc-800 text-amber-300 shadow-sm font-bold'
-                    : 'text-zinc-400 hover:text-zinc-200'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
 
-          <div className="relative flex items-center">
-            <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchKeyword}
-              onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder="筛选模块..."
-              className="pl-8 pr-14 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all w-36 xl:w-44 shadow-inner"
-            />
-            <button
-              type="button"
-              onClick={() => setIsCommandPaletteOpen(true)}
-              title="打开全局命令与知识检索面板 (Ctrl/Cmd + K)"
-              className="absolute right-1.5 px-1.5 py-0.5 text-[10px] font-mono font-bold text-zinc-400 hover:text-amber-300 bg-zinc-850 hover:bg-zinc-800 border border-zinc-700/80 rounded-md transition-colors"
-            >
+          <button
+            type="button"
+            onClick={() => setIsCommandPaletteOpen(true)}
+            className="flex items-center gap-2 px-2.5 xl:px-3 py-1.5 text-xs font-bold bg-zinc-950/90 border border-zinc-800 hover:border-amber-500/40 text-zinc-400 hover:text-zinc-200 rounded-xl transition-all shadow-inner whitespace-nowrap"
+            title="打开全局命令与知识检索面板 (Ctrl/Cmd + K)"
+          >
+            <IconSearch className="w-3.5 h-3.5 text-zinc-400" />
+            <span className="hidden xl:inline text-zinc-400">全库检索</span>
+            <kbd className="px-1.5 py-0.5 text-[10px] font-mono font-bold text-amber-300/90 bg-zinc-850 border border-zinc-700/80 rounded-md">
               ⌘K
-            </button>
-          </div>
+            </kbd>
+          </button>
 
           <button
             type="button"
@@ -2384,7 +2384,7 @@ const App: React.FC = () => {
               }
             }}
             title="管理与上传个人专属资料/电子书"
-            className="px-3 py-1.5 text-xs font-bold bg-zinc-900/90 hover:bg-zinc-850 text-amber-300 border border-amber-500/30 hover:border-amber-500/60 rounded-xl shadow-sm transition-all flex items-center gap-1.5 active:scale-95"
+            className="px-2.5 xl:px-3 py-1.5 text-xs font-bold bg-zinc-900/90 hover:bg-zinc-850 text-amber-300 border border-amber-500/30 hover:border-amber-500/60 rounded-xl shadow-sm transition-all flex items-center gap-1.5 active:scale-95 whitespace-nowrap"
           >
             <IconBook className="w-3.5 h-3.5 text-amber-400" />
             <span>资料库</span>
@@ -2394,14 +2394,14 @@ const App: React.FC = () => {
             type="button"
             onClick={() => setIsAISettingsOpen(true)}
             title="点击切换或配置双 AI 引擎（建树拆书引擎 / 伴学精讲引擎）"
-            className="px-3 py-1.5 text-xs font-bold bg-zinc-900/95 hover:bg-zinc-850 text-zinc-200 border border-zinc-800 hover:border-amber-500/50 rounded-xl shadow-sm transition-all flex items-center gap-2 active:scale-95"
+            className="px-2.5 xl:px-3 py-1.5 text-xs font-bold bg-zinc-900/95 hover:bg-zinc-850 text-zinc-200 border border-zinc-800 hover:border-amber-500/50 rounded-xl shadow-sm transition-all flex items-center gap-1.5 active:scale-95 whitespace-nowrap"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-            <span className="hidden xl:inline font-mono text-[11px] text-zinc-400">
+            <span className="hidden 2xl:inline font-mono text-[11px] text-zinc-400">
               ⚡ {(aiSettings.buildEngine?.model || 'deepseek-v4.1-flash').replace('deepseek-', 'ds-')}
             </span>
-            <span className="hidden xl:inline text-zinc-700">|</span>
-            <span className="font-mono text-[11px] text-amber-300">
+            <span className="hidden 2xl:inline text-zinc-700">|</span>
+            <span className="hidden lg:inline font-mono text-[11px] text-amber-300">
               💎 {aiSettings.mentorEngine?.model || aiSettings.model || 'gemini-3.8-flash'}
             </span>
             <IconSettings className="w-3.5 h-3.5 text-amber-400/90" />
@@ -2529,10 +2529,10 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-col gap-4 lg:gap-6 h-[calc(100vh-120px)] sm:h-[calc(100vh-130px)] lg:h-[calc(100vh-8.2rem)] lg:flex-row">
+      <div className="flex flex-1 min-h-0 flex-col gap-3 lg:gap-5 xl:flex-row">
         <aside
-          className={`hidden lg:flex min-h-0 flex-shrink-0 flex-col rounded-[28px] border border-zinc-800/80 bg-zinc-900/60 p-4 shadow-xl backdrop-blur-xl transition-all duration-300 lg:h-full ${
-            isProjectSidebarCollapsed ? 'lg:w-24' : 'lg:w-60'
+          className={`hidden xl:flex min-h-0 flex-shrink-0 flex-col rounded-[28px] border border-zinc-800/80 bg-zinc-900/65 p-4 shadow-xl backdrop-blur-2xl transition-all duration-300 xl:h-full ${
+            isProjectSidebarCollapsed ? 'xl:w-24' : 'xl:w-60'
           }`}
         >
           <div className="flex justify-between items-center mb-6 gap-2">
@@ -2718,7 +2718,7 @@ const App: React.FC = () => {
         </aside>
 
         <main
-          className={`relative flex-1 min-h-0 lg:h-full ${isDraggingFile ? 'ring-2 ring-amber-500 ring-dashed bg-amber-500/5' : ''}`}
+          className={`relative flex-1 min-h-0 h-full ${isDraggingFile ? 'ring-2 ring-amber-500 ring-dashed bg-amber-500/5' : ''}`}
           onDragOver={handleDragOverFile}
           onDragLeave={handleDragLeaveFile}
           onDrop={handleDropFile}
@@ -2748,23 +2748,26 @@ const App: React.FC = () => {
             </div>
           )}
           {projects.length === 0 && !activeBuildingJob ? (
-            <div className="h-full min-h-[420px] flex items-center justify-center p-4 sm:p-8 overflow-y-auto">
-              <div className="max-w-3xl w-full bg-zinc-900/75 border border-zinc-800/90 rounded-3xl p-6 sm:p-10 shadow-2xl backdrop-blur-xl animate-fadeIn">
+            <div className="h-full flex items-start sm:items-center justify-center p-2 sm:p-8 pb-24 md:pb-8 overflow-y-auto">
+              <div className="max-w-3xl w-full leather-card rounded-3xl p-5 sm:p-10 shadow-2xl backdrop-blur-2xl animate-slideUp">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-black mb-4">
                   <IconSparkles className="w-3.5 h-3.5" />
                   <span>AgentLearn 双引擎智学工作台</span>
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-black text-zinc-100 tracking-tight mb-2">
+                <h2 className="text-xl sm:text-3xl font-black text-zinc-100 tracking-tight mb-2">
                   把厚重的专业教材，拆解成可交互的<span className="text-amber-400">知识拓扑图</span>
                 </h2>
-                <p className="text-sm text-zinc-400 leading-relaxed mb-7">
+                <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed mb-6 sm:mb-7">
                   {currentUser
                     ? `欢迎回来，${currentUser.username}！当前学习空间尚未创建课程，只需三步即可开启你的 AI 伴学之旅：`
                     : '无需繁琐配置，登录后即可享有独立隔离资料库，三步开启 AI 教材拆解与随堂精讲：'}
                 </p>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                  <div className="bg-zinc-950/80 border border-zinc-800/90 rounded-2xl p-4 hover:border-amber-500/30 transition-colors">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 mb-7 sm:mb-8">
+                  <div
+                    className="bg-zinc-950/80 border border-zinc-800/90 rounded-2xl p-4 hover:border-amber-500/40 hover:-translate-y-0.5 transition-all animate-stagger"
+                    style={{ animationDelay: '80ms' }}
+                  >
                     <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-black text-sm flex items-center justify-center mb-3">
                       01
                     </div>
@@ -2773,7 +2776,10 @@ const App: React.FC = () => {
                       上传 PDF / Markdown 电子书至专属资料库，或直接输入想攻克的学科主题。
                     </p>
                   </div>
-                  <div className="bg-zinc-950/80 border border-zinc-800/90 rounded-2xl p-4 hover:border-amber-500/30 transition-colors">
+                  <div
+                    className="bg-zinc-950/80 border border-zinc-800/90 rounded-2xl p-4 hover:border-amber-500/40 hover:-translate-y-0.5 transition-all animate-stagger"
+                    style={{ animationDelay: '160ms' }}
+                  >
                     <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-black text-sm flex items-center justify-center mb-3">
                       02
                     </div>
@@ -2782,7 +2788,10 @@ const App: React.FC = () => {
                       建树引擎自动提取核心章节、梳理先修依赖，并生成结构化的学习路线。
                     </p>
                   </div>
-                  <div className="bg-zinc-950/80 border border-zinc-800/90 rounded-2xl p-4 hover:border-amber-500/30 transition-colors">
+                  <div
+                    className="bg-zinc-950/80 border border-zinc-800/90 rounded-2xl p-4 hover:border-amber-500/40 hover:-translate-y-0.5 transition-all animate-stagger"
+                    style={{ animationDelay: '240ms' }}
+                  >
                     <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-black text-sm flex items-center justify-center mb-3">
                       03
                     </div>
@@ -2798,7 +2807,7 @@ const App: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setIsAuthModalOpen(true)}
-                      className="px-6 py-3 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black rounded-2xl text-sm hover:brightness-105 shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-2"
+                      className="btn-shimmer-gold px-6 py-3 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black rounded-2xl text-sm hover:brightness-105 shadow-lg shadow-amber-500/25 active:scale-95 transition-all flex items-center gap-2"
                     >
                       <IconLock className="w-4 h-4" />
                       <span>登录 / 注册开启专属空间</span>
@@ -2811,7 +2820,7 @@ const App: React.FC = () => {
                           setGeneratorPreDoc(null);
                           setIsAIGeneratorOpen(true);
                         }}
-                        className="px-6 py-3 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black rounded-2xl text-sm hover:brightness-105 shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-2"
+                        className="btn-shimmer-gold px-6 py-3 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black rounded-2xl text-sm hover:brightness-105 shadow-lg shadow-amber-500/25 active:scale-95 transition-all flex items-center gap-2"
                       >
                         <IconSparkles className="w-4 h-4" />
                         <span>AI 一键拆书建树</span>
@@ -2868,7 +2877,7 @@ const App: React.FC = () => {
               </div>
 
               {/* Mobile Stage Actions & Task List */}
-              <div className="md:hidden flex-1 min-h-0 overflow-y-auto space-y-2.5 pb-6">
+              <div className="md:hidden flex-1 min-h-0 overflow-y-auto space-y-2.5 pb-24">
                 <div className="flex items-center justify-between px-1 mb-2">
                   <span className="text-xs font-bold text-zinc-400">
                     {STATUS_CONFIG[mobileKanbanTab].label} ({getTasksByStatus(mobileKanbanTab).length})
@@ -2911,13 +2920,61 @@ const App: React.FC = () => {
                 )}
               </div>
 
-              {/* Desktop task count header */}
-              <div className="hidden md:block mb-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">
-                {filteredTasks.length} {filteredTasks.length === 1 ? '个知识模块' : '个知识模块'}
+              {/* Desktop & Tablet Kanban Toolbar */}
+              <div className="hidden md:flex flex-wrap items-center justify-between gap-2.5 mb-3 bg-zinc-900/65 border border-zinc-800/80 px-3.5 py-2 rounded-2xl backdrop-blur-md">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                    {filteredTasks.length} 个知识模块
+                  </span>
+                  {tags.length > 0 && (
+                    <>
+                      <div className="h-4 w-px bg-zinc-800" />
+                      <TagFilter
+                        tags={tagsWithTaskCounts}
+                        selectedTags={selectedTagIds}
+                        onChange={setSelectedTagIds}
+                      />
+                    </>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="relative flex items-center">
+                    <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      value={searchKeyword}
+                      onChange={(e) => setSearchKeyword(e.target.value)}
+                      placeholder="筛选当前看板模块..."
+                      className="pl-8 pr-3 py-1 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all w-44 shadow-inner"
+                    />
+                  </div>
+                  <div className="flex bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-0.5">
+                    {([
+                      { id: 'all', label: '全部' },
+                      { id: 'active', label: '进行中' },
+                      { id: 'completed', label: '已完成' },
+                    ] as { id: StatusFilter; label: string }[]).map(f => (
+                      <button
+                        type="button"
+                        key={f.id}
+                        onClick={() => setStatusFilter(f.id)}
+                        className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all active:scale-95 ${
+                          statusFilter === f.id
+                            ? 'bg-zinc-800 text-amber-300 shadow-sm font-bold'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
-              {/* Desktop 4-Column Grid */}
-              <div className="hidden md:grid flex-1 min-h-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {/* Desktop & Tablet 4-Column / 2x2 Grid */}
+              <div className="hidden md:grid flex-1 min-h-0 overflow-y-auto xl:overflow-hidden grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {KANBAN_COLUMNS.map(column => {
                   const columnTasks = getTasksByStatus(column);
                   const statusConfig = STATUS_CONFIG[column];
@@ -2925,7 +2982,7 @@ const App: React.FC = () => {
                   return (
                     <div
                       key={column}
-                      className={`flex min-h-[420px] flex-col rounded-2xl p-4 transition-all duration-300 lg:h-full lg:min-h-0 ${
+                      className={`flex min-h-[280px] flex-col rounded-2xl p-4 transition-all duration-300 xl:h-full xl:min-h-0 ${
                         isDragOver 
                           ? 'bg-zinc-850/90 ring-2 ring-amber-500/60 shadow-2xl scale-[1.01]' 
                           : 'bg-zinc-900/60 backdrop-blur-md border border-zinc-800/80 shadow-sm'
@@ -3007,6 +3064,88 @@ const App: React.FC = () => {
         </main>
       </div>
 
+      {/* Mobile Floating Glass Bottom Dock (< md) */}
+      <nav
+        aria-label="移动端快捷导航"
+        className="md:hidden fixed bottom-2.5 inset-x-3 z-40 pb-safe pointer-events-none"
+      >
+        <div className="pointer-events-auto bg-zinc-900/90 backdrop-blur-2xl border border-amber-500/20 rounded-2xl shadow-2xl shadow-black/80 px-2 py-1.5 flex items-center justify-between gap-1">
+          <button
+            type="button"
+            onClick={() => setWorkspaceMode('dependency')}
+            disabled={!selectedProject}
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl text-[10px] font-bold transition-all active:scale-90 disabled:opacity-35 ${
+              workspaceMode === 'dependency'
+                ? 'text-amber-300 bg-amber-500/10'
+                : 'text-zinc-400'
+            }`}
+          >
+            <IconTree className="w-4 h-4" />
+            <span>拓扑图</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setWorkspaceMode('kanban')}
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl text-[10px] font-bold transition-all active:scale-90 ${
+              workspaceMode === 'kanban'
+                ? 'text-amber-300 bg-amber-500/10'
+                : 'text-zinc-400'
+            }`}
+          >
+            <IconKanban className="w-4 h-4" />
+            <span>看板</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleContinueLearning}
+            className="btn-shimmer-gold flex-shrink-0 px-4 py-2 -my-1 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black text-xs shadow-lg shadow-amber-500/30 active:scale-90 flex items-center gap-1"
+          >
+            {recommendedContinueItem ? (
+              <>
+                <span>▶</span>
+                <span>继续</span>
+              </>
+            ) : (
+              <>
+                <IconSparkles className="w-3.5 h-3.5" />
+                <span>建树</span>
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (!currentUser) {
+                setIsAuthModalOpen(true);
+              } else {
+                setIsDocManagerOpen(true);
+              }
+            }}
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl text-[10px] font-bold text-zinc-400 hover:text-amber-300 active:scale-90"
+          >
+            <IconBook className="w-4 h-4" />
+            <span>资料库</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsAnnotationDigestOpen(true)}
+            className="relative flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl text-[10px] font-bold text-zinc-400 hover:text-amber-300 active:scale-90"
+          >
+            <IconFileText className="w-4 h-4" />
+            <span>批注本</span>
+            {annotations.length > 0 && (
+              <span className="absolute top-1 right-2.5 min-w-[14px] h-[14px] px-1 rounded-full bg-amber-400 text-zinc-950 text-[9px] font-black flex items-center justify-center">
+                {annotations.length > 99 ? '99+' : annotations.length}
+              </span>
+            )}
+          </button>
+        </div>
+      </nav>
+
       {isEditModalOpen && editingTask && (() => {
         const currentProjId = tasks.find(t => t.task.id === editingTask.id)?.project.id || selectedProject;
         const currentProjectTasks = tasks
@@ -3033,7 +3172,7 @@ const App: React.FC = () => {
 
         return (
         <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-1.5 sm:p-3 animate-fadeIn"
+          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-0 sm:p-3 animate-fadeIn"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setIsEditModalOpen(false);
@@ -3041,7 +3180,7 @@ const App: React.FC = () => {
             }
           }}
         >
-          <div className="bg-zinc-900/95 sm:rounded-2xl shadow-2xl w-full max-w-[98vw] xl:max-w-[1440px] h-[96vh] sm:h-[92vh] flex flex-col overflow-hidden animate-slideUp border border-zinc-700/80 text-zinc-100">
+          <div className="bg-zinc-900/95 rounded-none sm:rounded-2xl shadow-2xl w-full max-w-[100vw] sm:max-w-[96vw] xl:max-w-[1440px] h-[100dvh] sm:h-[92dvh] flex flex-col overflow-hidden animate-sheet-mobile border-0 sm:border border-zinc-700/80 text-zinc-100">
             {/* Modal Header with Chapter Navigation */}
             <div className="p-3 sm:px-5 sm:py-3.5 border-b border-zinc-800 flex flex-wrap lg:flex-nowrap items-center justify-between gap-2.5 bg-zinc-950/80">
               <div className="min-w-0 flex-1">
@@ -3102,7 +3241,7 @@ const App: React.FC = () => {
                   type="button"
                   onClick={handleEnrichTaskWithAI}
                   disabled={isEnrichingTask}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:brightness-105 text-zinc-950 rounded-xl text-xs font-black transition-all shadow-md shadow-amber-500/20 active:scale-95 disabled:opacity-50"
+                  className="btn-shimmer-gold flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:brightness-105 text-zinc-950 rounded-xl text-xs font-black transition-all shadow-md shadow-amber-500/20 active:scale-95 disabled:opacity-50"
                   title="由 AI 导师流式研读资料库教材并撰写深度讲义"
                 >
                   {isEnrichingTask ? (
@@ -3696,7 +3835,7 @@ const App: React.FC = () => {
                           }}
                           rows={18}
                           placeholder="在这里随手记录学习笔记、推导步骤、代码随笔，或整理自己的速记卡片...&#10;支持 $数学公式$、```代码块```、> [!NOTE] 知识卡片 与 [[双向链接]]！"
-                          className="w-full flex-1 min-h-[460px] max-h-[580px] p-4 text-xs font-mono bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 leading-relaxed resize-y shadow-inner"
+                          className="w-full flex-1 min-h-[240px] sm:min-h-[340px] lg:min-h-[420px] max-h-[55dvh] p-3.5 sm:p-4 text-xs font-mono bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 leading-relaxed resize-y shadow-inner"
                         />
                       </div>
                     )}
@@ -3901,31 +4040,33 @@ const App: React.FC = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="px-4 py-3 sm:px-5 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-2.5 bg-zinc-950/85">
-              <div className="flex items-center gap-2">
+            <div className="px-3 py-2.5 sm:px-5 sm:py-3 pb-safe border-t border-zinc-800 flex flex-wrap items-center justify-between gap-2 bg-zinc-950/90">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   type="button"
                   onClick={() => handleQuickSetStatus(editingTask.id, 'done')}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all shadow-sm active:scale-95 flex items-center gap-1.5 ${
+                  className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-black transition-all shadow-sm active:scale-95 flex items-center gap-1.5 ${
                     editingTask.status === 'done'
                       ? 'bg-amber-400 text-zinc-950 shadow-md shadow-amber-400/20'
                       : 'bg-zinc-850 text-amber-300 hover:bg-zinc-800 border border-amber-500/30'
                   }`}
                 >
-                  <IconCheck className="w-4 h-4" />
-                  <span>点亮此模块 (已掌握)</span>
+                  <IconCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">点亮此模块 (已掌握)</span>
+                  <span className="sm:hidden">已掌握</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickSetStatus(editingTask.id, 'in-progress')}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all shadow-sm active:scale-95 flex items-center gap-1.5 ${
+                  className={`px-2.5 sm:px-3.5 py-2 rounded-xl text-xs font-black transition-all shadow-sm active:scale-95 flex items-center gap-1.5 ${
                     editingTask.status === 'in-progress'
                       ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
                       : 'bg-zinc-850 text-zinc-300 hover:bg-zinc-800 border border-zinc-700'
                   }`}
                 >
                   <IconLightning className="w-3.5 h-3.5" />
-                  <span>设为攻克中</span>
+                  <span className="hidden sm:inline">设为攻克中</span>
+                  <span className="sm:hidden">攻克中</span>
                 </button>
               </div>
 

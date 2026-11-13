@@ -118,12 +118,12 @@ export const AnnotationDigestModal: React.FC<AnnotationDigestModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[105] bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-fadeIn"
+      className="fixed inset-0 z-[105] bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden animate-slideUp">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-4xl h-[92dvh] sm:h-[88dvh] flex flex-col overflow-hidden animate-sheet-mobile pb-safe">
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-zinc-800 bg-zinc-950/80 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
