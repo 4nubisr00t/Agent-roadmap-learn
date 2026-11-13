@@ -26,7 +26,7 @@ import { toPng } from 'html-to-image';
 import { getItem, removeItem, setItem, STORAGE_KEYS } from '../utils/storage.js';
 import TagBadge from './TagBadge.js';
 import TagSelector from './TagSelector.js';
-import { IconTree, IconCheck, IconLightning, IconPlus, IconClose, IconChevronRight, IconChevronLeft } from './Icons.js';
+import { IconTree, IconCheck, IconLightning, IconPlus, IconClose, IconChevronRight, IconChevronLeft, IconCompass, IconOrbit, IconSettings, IconSparkles } from './Icons.js';
 import { useFeedback } from './FeedbackProvider.js';
 import { BranchHorizonView } from './BranchHorizonView.js';
 import { SolarObservatoryView } from './SolarObservatoryView.js';
@@ -1778,7 +1778,7 @@ export default function DependencyViewsPanel({
                         : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
                     }`}
                   >
-                    <span>🧭</span>
+                    <IconCompass className="w-3.5 h-3.5" />
                     <span>分岔学习</span>
                   </button>
                   <button
@@ -1792,7 +1792,7 @@ export default function DependencyViewsPanel({
                         : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
                     }`}
                   >
-                    <span>🌌</span>
+                    <IconOrbit className="w-3.5 h-3.5" />
                     <span>星图总览</span>
                   </button>
                   <button
@@ -1807,7 +1807,7 @@ export default function DependencyViewsPanel({
                     }`}
                     title="拓扑连线编辑器"
                   >
-                    <span>⚙️</span>
+                    <IconSettings className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">连线编辑</span>
                     <span className="sm:hidden">连线</span>
                   </button>
@@ -1972,7 +1972,7 @@ export default function DependencyViewsPanel({
             {nodes.length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none px-4">
                 <div className="text-center bg-zinc-900/75 border border-zinc-800/80 px-6 py-5 rounded-2xl backdrop-blur-md shadow-xl">
-                  <div className="text-3xl mb-2">✨</div>
+                  <IconSparkles className="w-8 h-8 text-amber-400 mx-auto mb-2.5" />
                   <p className="text-sm font-bold text-zinc-200">当前图谱中暂无学习节点</p>
                   <p className="text-xs text-zinc-400 mt-1">点击左上角「+ 添加模块」即可快速挂载知识点</p>
                 </div>
@@ -2115,7 +2115,7 @@ export default function DependencyViewsPanel({
                           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
                           <span className="font-bold truncate">{task.title}</span>
                           {isSelected && (
-                            <span className="ml-auto text-amber-400 font-black flex-shrink-0">✓</span>
+                            <IconCheck className="w-3.5 h-3.5 ml-auto text-amber-400 flex-shrink-0" />
                           )}
                         </div>
                         {task.description && (

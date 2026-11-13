@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { renderMarkdown } from '../../utils/markdown.js';
-import { IconClose, IconPin, IconSearch, IconSparkles, IconTrash, IconUpload } from '../Icons.js';
+import { IconClose, IconMessage, IconPin, IconSearch, IconSparkles, IconTrash, IconUpload } from '../Icons.js';
 import { useFeedback } from '../FeedbackProvider.js';
 
 export interface DigestAnnotation {
@@ -92,15 +92,15 @@ export const AnnotationDigestModal: React.FC<AnnotationDigestModalProps> = ({
       const meta = taskMetaMap.get(ann.taskId);
       lines.push(`## ${idx + 1}. ${meta?.projectName ? `[${meta.projectName}] ` : ''}${ann.taskTitle}`);
       lines.push('');
-      lines.push(`> **📌 划选原文**`);
+      lines.push(`> **划选原文**`);
       lines.push(`> ${ann.selectedText.replace(/\n/g, '\n> ')}`);
       lines.push('');
       if (ann.comment) {
-        lines.push(`- **💬 个人疑问/批注**：${ann.comment}`);
+        lines.push(`- **个人疑问/批注**：${ann.comment}`);
       }
       if (ann.aiResponse) {
         lines.push('');
-        lines.push(`### 💎 导师精讲解析`);
+        lines.push(`### 导师精讲解析`);
         lines.push(ann.aiResponse);
       }
       lines.push('\n---\n');
@@ -200,7 +200,7 @@ export const AnnotationDigestModal: React.FC<AnnotationDigestModalProps> = ({
             <div className="py-16 text-center text-zinc-500 space-y-2">
               <IconSparkles className="w-10 h-10 text-zinc-700 mx-auto" />
               <p className="text-sm font-bold text-zinc-400">暂无符合条件的划词批注记录</p>
-              <p className="text-xs text-zinc-500">在任意章节讲义中划选词句点击「⚡ 即刻释义」，所有精华都会自动沉淀于此</p>
+              <p className="text-xs text-zinc-500">在任意章节讲义中划选词句点击「即刻释义」，所有精华都会自动沉淀于此</p>
             </div>
           ) : (
             filtered.map((ann) => {
@@ -249,8 +249,9 @@ export const AnnotationDigestModal: React.FC<AnnotationDigestModalProps> = ({
                   </div>
 
                   {ann.comment && (
-                    <div className="text-xs font-semibold text-zinc-300 bg-zinc-950/60 px-3 py-2 rounded-xl border border-zinc-800/80">
-                      💬 {ann.comment}
+                    <div className="flex items-start gap-2 text-xs font-semibold text-zinc-300 bg-zinc-950/60 px-3 py-2 rounded-xl border border-zinc-800/80">
+                      <IconMessage className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                      <span>{ann.comment}</span>
                     </div>
                   )}
 

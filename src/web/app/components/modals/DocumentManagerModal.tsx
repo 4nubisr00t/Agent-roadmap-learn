@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { IconBook, IconUpload, IconEdit, IconSparkles, IconTrash, IconClose, IconFileText, IconLayers } from '../Icons.js';
+import { IconBook, IconUpload, IconEdit, IconSparkles, IconTrash, IconClose, IconFileText, IconLayers, IconFolder, IconGlobe, IconPackage } from '../Icons.js';
 import { useFeedback } from '../FeedbackProvider.js';
 
 export interface UserDocumentSummary {
@@ -126,7 +126,7 @@ export const DocumentManagerModal: React.FC<DocumentManagerModalProps> = ({
         if (xhr.status >= 200 && xhr.status < 300) {
           setUploadProgress(100);
           setUploadStatusText(`《${displayName}》已安全存入知识库！`);
-          setUploadSuccessMessage(`《${displayName}》已成功存入项目知识库空间！仅做资料安全存盘，未消耗 Token 解析；您可随时在下方列表点击【✨ AI 读教材构建图谱】开始构建。`);
+          setUploadSuccessMessage(`《${displayName}》已成功存入项目知识库空间！仅做资料安全存盘，未消耗 Token 解析；您可随时在下方列表点击【AI 读教材构建图谱】开始构建。`);
           await loadDocuments();
           setPasteTitle('');
           setPasteContent('');
@@ -269,7 +269,7 @@ export const DocumentManagerModal: React.FC<DocumentManagerModalProps> = ({
 
         setUploadProgress(percent);
         setUploadStatusText(
-          `🚀 多通道传输: ${completedChunks}/${totalChunks} 片 (${percent}%) • ${formatSpeed(speed)} • 剩余约 ${formatEta(eta)}`
+          `多通道传输: ${completedChunks}/${totalChunks} 片 (${percent}%) • ${formatSpeed(speed)} • 剩余约 ${formatEta(eta)}`
         );
       }
     };
@@ -281,7 +281,7 @@ export const DocumentManagerModal: React.FC<DocumentManagerModalProps> = ({
 
       // All chunks uploaded, invoke merge endpoint
       setUploadProgress(99);
-      setUploadStatusText('⚡ 分片已全部传输完毕，正在流式合成入库...');
+      setUploadStatusText('分片已全部传输完毕，正在流式合成入库...');
 
       const mergeRes = await fetch('/api/documents/merge-chunks', {
         method: 'POST',
@@ -310,7 +310,7 @@ export const DocumentManagerModal: React.FC<DocumentManagerModalProps> = ({
       setUploadProgress(100);
       setUploadStatusText(`《${file.name}》已安全存入知识库！`);
       setUploadSuccessMessage(
-        `《${file.name}》多通道切片上传完成，原件已完整安全存盘！未消耗 Token，您可随时在下方列表点击【✨ AI 读教材构建图谱】随时构建。`
+        `《${file.name}》多通道切片上传完成，原件已完整安全存盘！未消耗 Token，您可随时在下方列表点击【AI 读教材构建图谱】随时构建。`
       );
       await loadDocuments();
 
@@ -364,7 +364,7 @@ export const DocumentManagerModal: React.FC<DocumentManagerModalProps> = ({
         if (xhr.status >= 200 && xhr.status < 300) {
           setUploadProgress(100);
           setUploadStatusText(`《${file.name}》已安全存入知识库！`);
-          setUploadSuccessMessage(`《${file.name}》已成功存入项目知识库空间！仅做资料安全存盘，未消耗 Token 解析；您可随时在下方列表点击【✨ AI 读教材构建图谱】开始构建。`);
+          setUploadSuccessMessage(`《${file.name}》已成功存入项目知识库空间！仅做资料安全存盘，未消耗 Token 解析；您可随时在下方列表点击【AI 读教材构建图谱】开始构建。`);
           await loadDocuments();
           setTimeout(() => {
             setUploading(false);
@@ -576,10 +576,10 @@ export const DocumentManagerModal: React.FC<DocumentManagerModalProps> = ({
                   onChange={(e) => setTargetProjectId(e.target.value)}
                   className="w-full sm:w-auto bg-zinc-900 border-0 text-xs text-amber-300 font-bold focus:outline-none truncate"
                 >
-                  <option value="">🌐 全局通用 (不限项目)</option>
+                  <option value="">全局通用 (不限项目)</option>
                   {projects.map((p) => (
                     <option key={p.project.id} value={p.project.id}>
-                      📁 {p.project.name} {p.project.id === currentProjectId ? '(当前项目)' : ''}
+                      {p.project.name} {p.project.id === currentProjectId ? '(当前项目)' : ''}
                     </option>
                   ))}
                 </select>
@@ -646,7 +646,7 @@ export const DocumentManagerModal: React.FC<DocumentManagerModalProps> = ({
                     className="px-4 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-black flex items-center gap-2 shadow-sm transition-all active:scale-95"
                   >
                     <IconUpload className="w-3.5 h-3.5 text-amber-400" />
-                    <span>{uploading ? '分片上传处理中...' : '📱 点此选取手机/电脑文件'}</span>
+                    <span>{uploading ? '分片上传处理中...' : '点此选取本地文件'}</span>
                   </button>
                 </div>
 
@@ -706,7 +706,10 @@ export const DocumentManagerModal: React.FC<DocumentManagerModalProps> = ({
                         : 'text-zinc-400 hover:text-zinc-200'
                     }`}
                   >
-                    📁 当前项目 ({documents.filter(d => d.projectId === currentProjectId).length})
+                    <span className="inline-flex items-center gap-1.5">
+                      <IconFolder className="w-3.5 h-3.5" />
+                      <span>当前项目 ({documents.filter(d => d.projectId === currentProjectId).length})</span>
+                    </span>
                   </button>
                 )}
                 <button
@@ -718,7 +721,10 @@ export const DocumentManagerModal: React.FC<DocumentManagerModalProps> = ({
                       : 'text-zinc-400 hover:text-zinc-200'
                   }`}
                 >
-                  🌐 全部资料 ({documents.length})
+                  <span className="inline-flex items-center gap-1.5">
+                    <IconGlobe className="w-3.5 h-3.5" />
+                    <span>全部资料 ({documents.length})</span>
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -729,7 +735,10 @@ export const DocumentManagerModal: React.FC<DocumentManagerModalProps> = ({
                       : 'text-zinc-400 hover:text-zinc-200'
                   }`}
                 >
-                  📦 未分配 ({documents.filter(d => !d.projectId).length})
+                  <span className="inline-flex items-center gap-1.5">
+                    <IconPackage className="w-3.5 h-3.5" />
+                    <span>未分配 ({documents.filter(d => !d.projectId).length})</span>
+                  </span>
                 </button>
               </div>
 
@@ -763,12 +772,14 @@ export const DocumentManagerModal: React.FC<DocumentManagerModalProps> = ({
                             {doc.title}
                           </h4>
                           {doc.projectId ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex-shrink-0">
-                              📁 {doc.projectName || '专属项目'}
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex-shrink-0">
+                              <IconFolder className="w-3 h-3" />
+                              <span>{doc.projectName || '专属项目'}</span>
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-400 border border-zinc-700 flex-shrink-0">
-                              🌐 全局通用
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-400 border border-zinc-700 flex-shrink-0">
+                              <IconGlobe className="w-3 h-3" />
+                              <span>全局通用</span>
                             </span>
                           )}
                         </div>
@@ -795,10 +806,10 @@ export const DocumentManagerModal: React.FC<DocumentManagerModalProps> = ({
                           className="flex-1 sm:w-auto sm:max-w-[160px] bg-zinc-900 border border-zinc-750 text-zinc-300 hover:text-amber-300 rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none truncate"
                           title="切换该资料归属的项目知识库"
                         >
-                          <option value="">🌐 全局通用</option>
+                          <option value="">全局通用</option>
                           {projects.map((p) => (
                             <option key={p.project.id} value={p.project.id}>
-                              📁 {p.project.name}
+                              {p.project.name}
                             </option>
                           ))}
                         </select>
@@ -817,7 +828,7 @@ export const DocumentManagerModal: React.FC<DocumentManagerModalProps> = ({
                           title="点击此按钮后，AI 才开始研读本教材并构建专属知识图谱"
                         >
                           <IconSparkles className="w-3.5 h-3.5 text-zinc-950 flex-shrink-0" />
-                          <span>✨ AI 读教材构建图谱</span>
+                          <span>AI 读教材构建图谱</span>
                         </button>
 
                         {/* Delete Button */}

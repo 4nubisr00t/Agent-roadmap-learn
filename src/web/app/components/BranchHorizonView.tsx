@@ -3,10 +3,17 @@ import {
   IconCheck,
   IconChevronLeft,
   IconChevronRight,
+  IconClock,
+  IconCornerUpLeft,
   IconLightning,
+  IconLock,
+  IconOrbit,
   IconPlus,
+  IconRocket,
   IconSparkles,
   IconTree,
+  IconTrophy,
+  IconUnlock,
 } from './Icons.js';
 
 export interface HorizonTaskItem {
@@ -269,7 +276,7 @@ export const BranchHorizonView: React.FC<BranchHorizonViewProps> = ({
           onClick={onOpenSolarMap}
           className="btn-shimmer-gold px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-sky-500/20 hover:from-amber-500/30 hover:to-sky-500/30 border border-amber-400/45 text-amber-200 text-xs font-black flex items-center gap-2 shadow-lg shadow-amber-500/10 active:scale-95 transition-all"
         >
-          <span className="text-sm">🌌</span>
+          <IconOrbit className="w-3.5 h-3.5 text-sky-300" />
           <span>进入星图总览</span>
           <span className="hidden sm:inline text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-950/70 text-amber-300 border border-amber-500/30">
             {stats.total} 星体
@@ -285,8 +292,9 @@ export const BranchHorizonView: React.FC<BranchHorizonViewProps> = ({
             前置基石节点 ({upstreamTasks.length})
           </div>
           {upstreamTasks.length === 0 ? (
-            <div className="px-3.5 py-1.5 rounded-full bg-zinc-900/70 border border-zinc-800 text-[11px] font-semibold text-zinc-400">
-              ✨ 起始基石节点 · 零前置门槛
+            <div className="px-3.5 py-1.5 rounded-full bg-zinc-900/70 border border-zinc-800 text-[11px] font-semibold text-zinc-400 inline-flex items-center gap-1.5">
+              <IconSparkles className="w-3 h-3 text-amber-400" />
+              <span>起始基石节点 · 零前置门槛</span>
             </div>
           ) : (
             <div className="flex flex-wrap items-center justify-center gap-2">
@@ -303,9 +311,13 @@ export const BranchHorizonView: React.FC<BranchHorizonViewProps> = ({
                         : 'bg-zinc-900/90 border-amber-500/35 text-amber-200 hover:border-amber-400'
                     }`}
                   >
-                    <span>{upDone ? '✅' : '⏳'}</span>
+                    {upDone ? (
+                      <IconCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    ) : (
+                      <IconClock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    )}
                     <span className="max-w-[200px] truncate">{up.title}</span>
-                    <span className="text-[10px] opacity-60 group-hover:opacity-100">↩</span>
+                    <IconCornerUpLeft className="w-3 h-3 opacity-60 group-hover:opacity-100 shrink-0" />
                   </button>
                 );
               })}
@@ -344,7 +356,7 @@ export const BranchHorizonView: React.FC<BranchHorizonViewProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span
-                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-black border ${
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black border ${
                     focusDone
                       ? 'bg-amber-400 text-zinc-950 border-amber-300'
                       : focusReady
@@ -352,7 +364,22 @@ export const BranchHorizonView: React.FC<BranchHorizonViewProps> = ({
                         : 'bg-zinc-800 text-zinc-400 border-zinc-700'
                   }`}
                 >
-                  {focusDone ? '🌟 已掌握点亮' : focusReady ? '🚀 当前焦点 · 已解锁可攻克' : `🔒 待前置 (${focusBlockedBy.length})`}
+                  {focusDone ? (
+                    <>
+                      <IconSparkles className="w-3 h-3" />
+                      <span>已掌握点亮</span>
+                    </>
+                  ) : focusReady ? (
+                    <>
+                      <IconRocket className="w-3 h-3" />
+                      <span>当前焦点 · 已解锁可攻克</span>
+                    </>
+                  ) : (
+                    <>
+                      <IconLock className="w-3 h-3" />
+                      <span>待前置 ({focusBlockedBy.length})</span>
+                    </>
+                  )}
                 </span>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${priorityInfo.cls}`}>
                   {priorityInfo.label}
@@ -370,7 +397,7 @@ export const BranchHorizonView: React.FC<BranchHorizonViewProps> = ({
                 }`}
               >
                 <IconCheck className="w-3.5 h-3.5" />
-                <span>{updatingId === focusTask.id ? '同步中...' : focusDone ? '已点亮 ✓' : '标记已掌握'}</span>
+                <span>{updatingId === focusTask.id ? '同步中...' : focusDone ? '已点亮' : '标记已掌握'}</span>
               </button>
             </div>
 
@@ -437,9 +464,16 @@ export const BranchHorizonView: React.FC<BranchHorizonViewProps> = ({
                 key={sib.id}
                 type="button"
                 onClick={() => stepToNode(sib.id, 'warp')}
-                className="px-2.5 py-1 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/40 text-zinc-300 hover:text-amber-300 font-semibold transition-all active:scale-95 max-w-[160px] truncate"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/40 text-zinc-300 hover:text-amber-300 font-semibold transition-all active:scale-95 max-w-[160px]"
               >
-                {sib.status === 'done' ? '✅' : isTaskReady(sib.id) ? '⚡' : '🔒'} {sib.title}
+                {sib.status === 'done' ? (
+                  <IconCheck className="w-3 h-3 text-emerald-400 shrink-0" />
+                ) : isTaskReady(sib.id) ? (
+                  <IconLightning className="w-3 h-3 text-sky-400 shrink-0" />
+                ) : (
+                  <IconLock className="w-3 h-3 text-zinc-500 shrink-0" />
+                )}
+                <span className="truncate">{sib.title}</span>
               </button>
             ))}
           </div>
@@ -460,7 +494,10 @@ export const BranchHorizonView: React.FC<BranchHorizonViewProps> = ({
 
           {downstreamTasks.length === 0 ? (
             <div className="max-w-lg mx-auto rounded-2xl border border-zinc-800/90 bg-zinc-900/55 p-5 text-center backdrop-blur-md">
-              <p className="text-xs font-bold text-amber-300 mb-1">🏆 已抵达当前学习路径终点</p>
+              <p className="text-xs font-bold text-amber-300 mb-1 inline-flex items-center justify-center gap-1.5">
+                <IconTrophy className="w-3.5 h-3.5" />
+                <span>已抵达当前学习路径终点</span>
+              </p>
               <p className="text-[11px] text-zinc-400 mb-3.5">
                 你可以拓展下一级后继知识点，或进入《星图总览》跃迁到课程的其他支线星系。
               </p>
@@ -468,9 +505,10 @@ export const BranchHorizonView: React.FC<BranchHorizonViewProps> = ({
                 <button
                   type="button"
                   onClick={onOpenSolarMap}
-                  className="px-4 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-black active:scale-95 transition-all"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-black active:scale-95 transition-all"
                 >
-                  🌌 打开星图选分支
+                  <IconOrbit className="w-3.5 h-3.5" />
+                  <span>打开星图选分支</span>
                 </button>
                 <button
                   type="button"
@@ -516,7 +554,7 @@ export const BranchHorizonView: React.FC<BranchHorizonViewProps> = ({
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black border ${
                             branchDone
                               ? 'bg-amber-400/15 text-amber-300 border-amber-400/35'
                               : branchReady
@@ -526,13 +564,27 @@ export const BranchHorizonView: React.FC<BranchHorizonViewProps> = ({
                                   : 'bg-zinc-800 text-zinc-400 border-zinc-700'
                           }`}
                         >
-                          {branchDone
-                            ? '✅ 已掌握'
-                            : branchReady
-                              ? '⚡ 已解锁'
-                              : branchUnlocksAfterFocus
-                                ? '🔓 完成当前即解锁'
-                                : '🔒 多重前置'}
+                          {branchDone ? (
+                            <>
+                              <IconCheck className="w-3 h-3" />
+                              <span>已掌握</span>
+                            </>
+                          ) : branchReady ? (
+                            <>
+                              <IconLightning className="w-3 h-3" />
+                              <span>已解锁</span>
+                            </>
+                          ) : branchUnlocksAfterFocus ? (
+                            <>
+                              <IconUnlock className="w-3 h-3" />
+                              <span>完成当前即解锁</span>
+                            </>
+                          ) : (
+                            <>
+                              <IconLock className="w-3 h-3" />
+                              <span>多重前置</span>
+                            </>
+                          )}
                         </span>
                         <span className="text-[11px] font-bold text-amber-300/80 group-hover:text-amber-300 flex items-center gap-0.5 transition-transform group-hover:translate-x-0.5">
                           <span>推进至此</span>

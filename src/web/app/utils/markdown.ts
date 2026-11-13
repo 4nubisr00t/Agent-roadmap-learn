@@ -161,24 +161,24 @@ export function renderMarkdown(content: string): string {
       const displayTitle = title.trim() || type.toUpperCase();
 
       let colorClass = 'border-amber-500/40 bg-amber-500/5 text-amber-200';
-      let icon = '💡';
+      let iconSvg = '<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>';
       if (['tip', 'hint'].includes(calloutType)) {
         colorClass = 'border-emerald-500/40 bg-emerald-500/5 text-emerald-200';
-        icon = '✨';
+        iconSvg = '<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.5 6.5L21 11l-6.5 2.5L12 20l-2.5-6.5L3 11l6.5-2.5L12 2z"/></svg>';
       } else if (['warning', 'caution', 'danger', 'bug'].includes(calloutType)) {
         colorClass = 'border-rose-500/40 bg-rose-500/5 text-rose-200';
-        icon = '⚠️';
+        iconSvg = '<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
       } else if (['important', 'info', 'note'].includes(calloutType)) {
         colorClass = 'border-sky-500/40 bg-sky-500/5 text-sky-200';
-        icon = 'ℹ️';
+        iconSvg = '<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
       } else if (['example', 'code'].includes(calloutType)) {
         colorClass = 'border-purple-500/40 bg-purple-500/5 text-purple-200';
-        icon = '📌';
+        iconSvg = '<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>';
       }
 
       return `<div class="obsidian-callout my-4 rounded-xl border-l-4 p-3.5 shadow-sm ${colorClass}">
         <div class="callout-header flex items-center gap-2 font-bold text-xs uppercase tracking-wider mb-1.5">
-          <span>${icon}</span>
+          ${iconSvg}
           <span>${displayTitle}</span>
         </div>
         <div class="callout-content text-xs opacity-90 leading-relaxed">${cleanBody.trim()}</div>
@@ -188,7 +188,7 @@ export function renderMarkdown(content: string): string {
     // Step 5: Obsidian WikiLinks: [[Target Page|Alias]] or [[Target Page]]
     text = text.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_match, target, alias) => {
       const label = alias || target;
-      return `<span class="obsidian-wikilink inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 text-xs font-semibold border border-amber-500/30 cursor-pointer" data-wikilink="${encodeURIComponent(target.trim())}">🔗 ${label.trim()}</span>`;
+      return `<span class="obsidian-wikilink inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 text-xs font-semibold border border-amber-500/30 cursor-pointer" data-wikilink="${encodeURIComponent(target.trim())}"><svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>${label.trim()}</span>`;
     });
 
     // Step 6: Obsidian Highlights: ==Highlighted Text==

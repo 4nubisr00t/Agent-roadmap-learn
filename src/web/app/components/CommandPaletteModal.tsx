@@ -174,7 +174,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       .slice(0, q ? 18 : 6);
 
     for (const t of matchedTasks) {
-      const statusLabel = t.status === 'done' ? '✅ 已掌握' : t.status === 'in-progress' ? '⚡ 攻克中' : '⭕ 待学习';
+      const statusLabel = t.status === 'done' ? '已掌握' : t.status === 'in-progress' ? '攻克中' : '待学习';
       list.push({
         id: `task_${t.id}`,
         category: 'task',

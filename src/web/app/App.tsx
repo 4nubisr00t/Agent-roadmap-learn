@@ -41,6 +41,18 @@ import {
   IconRefresh,
   IconClock,
   IconMenu,
+  IconAI,
+  IconPlay,
+  IconDiamond,
+  IconTerminal,
+  IconMessage,
+  IconLightbulb,
+  IconAlertTriangle,
+  IconLink,
+  IconCheckSquare,
+  IconDownload,
+  IconTarget,
+  IconBarChart,
 } from './components/Icons.js';
 
 interface Project {
@@ -773,7 +785,7 @@ const App: React.FC = () => {
       if (data.success) {
         setNoteAutoSaveState('saved');
         if (!silent) {
-          setVaultSyncMessage(`✅ 已推送到 Obsidian: ${data.relativePath} (Syncthing 秒级多端同步中)`);
+          setVaultSyncMessage(`已推送到 Obsidian: ${data.relativePath} (Syncthing 秒级多端同步中)`);
           setTimeout(() => setVaultSyncMessage(null), 4000);
           toast.success(`已推送到 Obsidian: ${data.relativePath}`);
         }
@@ -827,7 +839,7 @@ const App: React.FC = () => {
       const data = await res.json();
       if (data.exists && data.content) {
         setEditingTask(prev => prev ? { ...prev, description: data.content } : null);
-        setVaultSyncMessage('✅ 已从 Obsidian 笔记库载入最新修改');
+        setVaultSyncMessage('已从 Obsidian 笔记库载入最新修改');
         setTimeout(() => setVaultSyncMessage(null), 3000);
         toast.success('已从 Obsidian 笔记库载入最新修改');
       } else {
@@ -1195,7 +1207,7 @@ const App: React.FC = () => {
   const handleInsertAnnotationInline = async (ann: AnnotationItem) => {
     if (!editingTask || !ann.aiResponse) return;
     const formattedAi = ann.aiResponse.split('\n').join('\n> ');
-    const calloutBlock = `\n\n> [!TIP] 💡 随堂划词批注：${ann.comment}\n> **📌 针对原文**：「${ann.selectedText.slice(0, 120)}${ann.selectedText.length > 120 ? '...' : ''}」\n>\n> ${formattedAi}\n`;
+    const calloutBlock = `\n\n> [!TIP] 随堂划词批注：${ann.comment}\n> **针对原文**：「${ann.selectedText.slice(0, 120)}${ann.selectedText.length > 120 ? '...' : ''}」\n>\n> ${formattedAi}\n`;
 
     const desc = editingTask.description || '';
     const snippetKey = ann.selectedText.trim().split(/\s+/)[0] || ann.selectedText.trim().slice(0, 20);
@@ -1209,7 +1221,7 @@ const App: React.FC = () => {
       const nextLineBreak = desc.indexOf('\n', fallbackIdx);
       const insertPos = nextParaBreak >= 0 ? nextParaBreak : (nextLineBreak >= 0 ? nextLineBreak : desc.length);
       newDescription = desc.slice(0, insertPos) + calloutBlock + desc.slice(insertPos);
-      toast = '✨ 已原位嵌入到对应讲义段落下方，并同步至 Obsidian！';
+      toast = '已原位嵌入到对应讲义段落下方，并同步至 Obsidian！';
     }
     await persistLectureDescriptionUpdate(newDescription, toast);
   };
@@ -1218,7 +1230,7 @@ const App: React.FC = () => {
   const handleAppendAnnotationToNotes = async (ann: AnnotationItem) => {
     if (!editingTask || !ann.aiResponse) return;
     const formattedAi = ann.aiResponse.split('\n').join('\n> ');
-    const appendBlock = `\n\n> [!TIP] 重点批注与导师解答\n> **📌 划词原文**：${ann.selectedText}\n> **💬 学员提问**：${ann.comment}\n>\n> ${formattedAi}\n`;
+    const appendBlock = `\n\n> [!TIP] 重点批注与导师解答\n> **划词原文**：${ann.selectedText}\n> **学员提问**：${ann.comment}\n>\n> ${formattedAi}\n`;
     await persistLectureDescriptionUpdate(
       (editingTask.description || '') + appendBlock,
       '已将导师解答写入本节笔记并同步至 Obsidian！'
@@ -2178,7 +2190,7 @@ const App: React.FC = () => {
                     className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-center justify-between gap-2 disabled:opacity-40 active:scale-95 transition-all"
                   >
                     <span className="flex items-center gap-2">
-                      <span>💎</span>
+                      <IconDiamond className="w-3.5 h-3.5 text-amber-400" />
                       <span>{isSyncingVault ? '同步 Obsidian 中...' : 'Obsidian 全库同步'}</span>
                     </span>
                     {vaultStatus?.syncthingDetected && (
@@ -2303,7 +2315,7 @@ const App: React.FC = () => {
               title={`继续学习：${recommendedContinueItem.task.title}`}
               className="btn-shimmer-gold px-3 xl:px-3.5 py-1.5 text-xs font-black bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-105 text-zinc-950 rounded-xl shadow-lg shadow-amber-500/25 active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap"
             >
-              <span>▶</span>
+              <IconPlay className="w-3 h-3" />
               <span>继续学习</span>
             </button>
           )}
@@ -2397,12 +2409,14 @@ const App: React.FC = () => {
             className="px-2.5 xl:px-3 py-1.5 text-xs font-bold bg-zinc-900/95 hover:bg-zinc-850 text-zinc-200 border border-zinc-800 hover:border-amber-500/50 rounded-xl shadow-sm transition-all flex items-center gap-1.5 active:scale-95 whitespace-nowrap"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-            <span className="hidden 2xl:inline font-mono text-[11px] text-zinc-400">
-              ⚡ {(aiSettings.buildEngine?.model || 'deepseek-v4.1-flash').replace('deepseek-', 'ds-')}
+            <span className="hidden 2xl:inline-flex items-center gap-1 font-mono text-[11px] text-zinc-400">
+              <IconLightning className="w-3 h-3 text-emerald-400" />
+              <span>{(aiSettings.buildEngine?.model || 'deepseek-v4.1-flash').replace('deepseek-', 'ds-')}</span>
             </span>
             <span className="hidden 2xl:inline text-zinc-700">|</span>
-            <span className="hidden lg:inline font-mono text-[11px] text-amber-300">
-              💎 {aiSettings.mentorEngine?.model || aiSettings.model || 'gemini-3.8-flash'}
+            <span className="hidden lg:inline-flex items-center gap-1 font-mono text-[11px] text-amber-300">
+              <IconDiamond className="w-3 h-3 text-amber-400" />
+              <span>{aiSettings.mentorEngine?.model || aiSettings.model || 'gemini-3.8-flash'}</span>
             </span>
             <IconSettings className="w-3.5 h-3.5 text-amber-400/90" />
           </button>
@@ -2448,7 +2462,7 @@ const App: React.FC = () => {
                     className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-200 hover:bg-zinc-800 hover:text-amber-300 flex items-center justify-between transition-colors"
                   >
                     <span className="flex items-center gap-2">
-                      <span>📖</span>
+                      <IconBook className="w-3.5 h-3.5 text-amber-400" />
                       <span>全书批注精华本</span>
                     </span>
                     {annotations.length > 0 && (
@@ -2468,7 +2482,7 @@ const App: React.FC = () => {
                     className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-200 hover:bg-zinc-800 hover:text-amber-300 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-between transition-colors"
                   >
                     <span className="flex items-center gap-2">
-                      <span>💎</span>
+                      <IconDiamond className="w-3.5 h-3.5 text-amber-400" />
                       <span>{isSyncingVault ? '同步 Obsidian 中...' : 'Obsidian 全库同步'}</span>
                     </span>
                     {vaultStatus?.syncthingDetected && (
@@ -2484,7 +2498,7 @@ const App: React.FC = () => {
                     }}
                     className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-300 hover:bg-zinc-800 hover:text-amber-300 flex items-center gap-2 transition-colors"
                   >
-                    <span>📤</span>
+                    <IconDownload className="w-3.5 h-3.5 text-zinc-400" />
                     <span>导出全库备份 (JSON)</span>
                   </button>
 
@@ -3104,7 +3118,7 @@ const App: React.FC = () => {
           >
             {recommendedContinueItem ? (
               <>
-                <span>▶</span>
+                <IconPlay className="w-3 h-3" />
                 <span>继续</span>
               </>
             ) : (
@@ -3166,8 +3180,8 @@ const App: React.FC = () => {
         const needsInitialLecture =
           !isEnrichingTask &&
           (!editingTask.description ||
-            editingTask.description.includes('💡 **Gemini 专属') ||
-            editingTask.description.includes('💡 **智能点亮') ||
+            editingTask.description.includes('**Gemini 专属') ||
+            editingTask.description.includes('**智能点亮') ||
             editingTask.description.trim().length < 150);
 
         return (
@@ -3214,7 +3228,7 @@ const App: React.FC = () => {
                       >
                         {currentProjectTasks.map((t, i) => (
                           <option key={t.id} value={t.id} className="bg-zinc-900 text-zinc-200">
-                            {t.status === 'done' ? '✅' : t.status === 'in-progress' ? '⚡' : '⭕'} {i + 1}. {t.title}
+                            [{t.status === 'done' ? '已掌握' : t.status === 'in-progress' ? '攻克中' : '待学习'}] {i + 1}. {t.title}
                           </option>
                         ))}
                       </select>
@@ -3253,8 +3267,8 @@ const App: React.FC = () => {
                   ) : (
                     <>
                       <IconSparkles className="w-3.5 h-3.5 text-zinc-950" />
-                      <span className="hidden sm:inline">💎 Gemini 精讲点亮</span>
-                      <span className="sm:hidden">💎 精讲</span>
+                      <span className="hidden sm:inline">Gemini 精讲点亮</span>
+                      <span className="sm:hidden">精讲</span>
                     </>
                   )}
                 </button>
@@ -3305,7 +3319,7 @@ const App: React.FC = () => {
                   }`}
                 >
                   <IconEdit className="w-3.5 h-3.5" />
-                  <span>✍️ 实时笔记</span>
+                  <span>实时笔记</span>
                 </button>
                 <button
                   type="button"
@@ -3317,7 +3331,7 @@ const App: React.FC = () => {
                   }`}
                 >
                   <IconAI className="w-3.5 h-3.5" />
-                  <span>💎 伴学对话</span>
+                  <span>伴学对话</span>
                 </button>
                 <button
                   type="button"
@@ -3352,7 +3366,7 @@ const App: React.FC = () => {
                           }`}
                         >
                           <IconFileText className="w-3.5 h-3.5" />
-                          <span>📖 讲义研读</span>
+                          <span>讲义研读</span>
                         </button>
                         <button
                           type="button"
@@ -3364,7 +3378,7 @@ const App: React.FC = () => {
                           }`}
                         >
                           <IconEdit className="w-3.5 h-3.5" />
-                          <span>✍️ 实时笔记 / Obsidian Studio</span>
+                          <span>实时笔记 / Obsidian Studio</span>
                         </button>
                       </div>
                       <span className="text-[11px] text-zinc-500 hidden xl:inline">
@@ -3399,7 +3413,7 @@ const App: React.FC = () => {
                               title="不打断阅读，在右侧即时流式剖析该词句的底层原理"
                             >
                               <IconLightning className="w-3.5 h-3.5 text-zinc-950" />
-                              <span>⚡ 即刻释义</span>
+                              <span>即刻释义</span>
                             </button>
                             <button
                               type="button"
@@ -3411,7 +3425,8 @@ const App: React.FC = () => {
                               className="flex items-center gap-1 px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-emerald-300 rounded-xl text-xs font-bold border border-zinc-800 hover:border-emerald-500/40 transition-all active:scale-95"
                               title="抛开晦涩术语，用生活大白话/形象比喻重新讲一遍"
                             >
-                              <span>🗣️ 大白话重讲</span>
+                              <IconMessage className="w-3 h-3 text-emerald-400" />
+                              <span>大白话重讲</span>
                             </button>
                             <button
                               type="button"
@@ -3423,8 +3438,8 @@ const App: React.FC = () => {
                               className="flex items-center gap-1 px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-amber-300 rounded-xl text-xs font-bold border border-zinc-800 hover:border-amber-500/30 transition-all active:scale-95"
                               title="为该概念生成可动手实操的代码或指令例题"
                             >
-                              <IconSparkles className="w-3 h-3 text-amber-400" />
-                              <span>💻 代码例题</span>
+                              <IconTerminal className="w-3 h-3 text-amber-400" />
+                              <span>代码例题</span>
                             </button>
                             <button
                               type="button"
@@ -3468,7 +3483,7 @@ const App: React.FC = () => {
                               className="px-6 py-2.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-zinc-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/20 active:scale-95 transition-all inline-flex items-center gap-2"
                             >
                               <IconLightning className="w-4 h-4 text-zinc-950" />
-                              <span>💎 唤醒导师流式精讲点亮</span>
+                              <span>唤醒导师流式精讲点亮</span>
                             </button>
                           </div>
                         ) : (
@@ -3512,7 +3527,8 @@ const App: React.FC = () => {
                               <div className="mt-6 p-4 rounded-2xl bg-gradient-to-br from-zinc-950/90 to-amber-950/15 border border-amber-500/30 space-y-3">
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="text-xs font-black text-amber-300 flex items-center gap-1.5">
-                                    <span>🎯 随堂自测过关提交</span>
+                                    <IconTarget className="w-3.5 h-3.5 text-amber-400" />
+                                    <span>随堂自测过关提交</span>
                                     <span className="text-[10px] font-normal text-zinc-400">写下你的思考结论，让右侧导师批改</span>
                                   </div>
                                   {nextTask && (
@@ -3522,9 +3538,11 @@ const App: React.FC = () => {
                                         handleQuickSetStatus(editingTask.id, 'done');
                                         handleSwitchEditingTask(nextTask);
                                       }}
-                                      className="text-[11px] font-bold text-emerald-300 hover:text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1 rounded-lg transition-all active:scale-95"
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-300 hover:text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1 rounded-lg transition-all active:scale-95"
                                     >
-                                      ✅ 确认掌握并进下一节 →
+                                      <IconCheck className="w-3 h-3" />
+                                      <span>确认掌握并进下一节</span>
+                                      <IconChevronRight className="w-3 h-3" />
                                     </button>
                                   )}
                                 </div>
@@ -3540,9 +3558,10 @@ const App: React.FC = () => {
                                     type="button"
                                     disabled={!quizAnswerDraft.trim()}
                                     onClick={handleSubmitQuizToMentor}
-                                    className="px-4 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black text-xs rounded-xl hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
+                                    className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black text-xs rounded-xl hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
                                   >
-                                    💎 提交给导师严格批改
+                                    <IconDiamond className="w-3.5 h-3.5" />
+                                    <span>提交给导师严格批改</span>
                                   </button>
                                 </div>
                               </div>
@@ -3564,9 +3583,9 @@ const App: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setVaultSyncMessage(null)}
-                        className="text-xs text-emerald-400/80 hover:text-emerald-200"
+                        className="text-xs text-emerald-400/80 hover:text-emerald-200 flex items-center justify-center"
                       >
-                        ✕
+                        <IconClose className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   )}
@@ -3630,12 +3649,14 @@ const App: React.FC = () => {
                       </span>
                       {noteAutoSaveState === 'saving' && (
                         <span className="text-[11px] text-amber-400 flex items-center gap-1 animate-pulse">
-                          <span>⏳ 自动保存中...</span>
+                          <IconClock className="w-3 h-3" />
+                          <span>自动保存中...</span>
                         </span>
                       )}
                       {noteAutoSaveState === 'saved' && (
                         <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-                          <span>✓ 已自动保存</span>
+                          <IconCheck className="w-3 h-3" />
+                          <span>已自动保存</span>
                         </span>
                       )}
                     </div>
@@ -3688,7 +3709,8 @@ const App: React.FC = () => {
                         className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all active:scale-95"
                         title="立即将当前笔记推送到 Obsidian 库"
                       >
-                        <span>⚡ 推送 Obsidian</span>
+                        <IconLightning className="w-3 h-3" />
+                        <span>推送 Obsidian</span>
                       </button>
 
                       {/* Pull from Obsidian */}
@@ -3698,7 +3720,8 @@ const App: React.FC = () => {
                         className="px-2.5 py-1 bg-zinc-850 hover:bg-zinc-800 text-zinc-300 border border-zinc-700/80 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all active:scale-95"
                         title="如在手机 Obsidian 客户端中修改了笔记，点击从外部重载"
                       >
-                        <span>🔄 外部重载</span>
+                        <IconRefresh className="w-3 h-3" />
+                        <span>外部重载</span>
                       </button>
                     </div>
                   </div>
@@ -3750,67 +3773,75 @@ const App: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleInsertSnippet('\n> [!NOTE] 知识要点\n> ', '\n', '此处记录本节核心定义与基础概念')}
-                      className="px-2 py-1 bg-sky-950/40 hover:bg-sky-900/40 text-sky-300 rounded border border-sky-800/40 text-[11px]"
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-sky-950/40 hover:bg-sky-900/40 text-sky-300 rounded border border-sky-800/40 text-[11px]"
                       title="Obsidian NOTE 知识卡片"
                     >
-                      📌 NOTE
+                      <IconPin className="w-3 h-3" />
+                      <span>NOTE</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleInsertSnippet('\n> [!TIP] 提分技巧\n> ', '\n', '此处记录解题思路、思维模型或速记口诀')}
-                      className="px-2 py-1 bg-emerald-950/40 hover:bg-emerald-900/40 text-emerald-300 rounded border border-emerald-800/40 text-[11px]"
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-950/40 hover:bg-emerald-900/40 text-emerald-300 rounded border border-emerald-800/40 text-[11px]"
                       title="Obsidian TIP 技巧卡片"
                     >
-                      ✨ TIP
+                      <IconSparkles className="w-3 h-3" />
+                      <span>TIP</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleInsertSnippet('\n> [!WARNING] 易错陷阱\n> ', '\n', '注意此处容易混淆的边界条件与反例')}
-                      className="px-2 py-1 bg-rose-950/40 hover:bg-rose-900/40 text-rose-300 rounded border border-rose-800/40 text-[11px]"
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-rose-950/40 hover:bg-rose-900/40 text-rose-300 rounded border border-rose-800/40 text-[11px]"
                       title="Obsidian WARNING 警示卡片"
                     >
-                      ⚠️ WARNING
+                      <IconAlertTriangle className="w-3 h-3" />
+                      <span>WARNING</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleInsertSnippet('\n> [!IMPORTANT] 核心考点\n> ', '\n', '高频必考核心定理或机制')}
-                      className="px-2 py-1 bg-purple-950/40 hover:bg-purple-900/40 text-purple-300 rounded border border-purple-800/40 text-[11px]"
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-purple-950/40 hover:bg-purple-900/40 text-purple-300 rounded border border-purple-800/40 text-[11px]"
                       title="Obsidian IMPORTANT 重点卡片"
                     >
-                      💡 IMPORTANT
+                      <IconLightbulb className="w-3 h-3" />
+                      <span>IMPORTANT</span>
                     </button>
                     <div className="w-[1px] h-4 bg-zinc-800 mx-1" />
                     <button
                       type="button"
                       onClick={() => handleInsertSnippet('\n```python\n', '\n```\n', '# Python 算法实现\ndef solution():\n    pass')}
-                      className="px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-300 font-mono rounded border border-zinc-800 text-[11px]"
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-300 font-mono rounded border border-zinc-800 text-[11px]"
                       title="插入代码块"
                     >
-                      💻 代码
+                      <IconTerminal className="w-3 h-3" />
+                      <span>代码</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleInsertSnippet('\n```mermaid\ngraph TD\n    A[前置知识] --> B[核心原理]\n    B --> C[实操运用]\n```\n')}
-                      className="px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-amber-300 font-mono rounded border border-zinc-800 text-[11px]"
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-amber-300 font-mono rounded border border-zinc-800 text-[11px]"
                       title="插入 Mermaid 流程/思维导图"
                     >
-                      📊 Mermaid
+                      <IconBarChart className="w-3 h-3" />
+                      <span>Mermaid</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleInsertSnippet('[[', ']]', '关联知识点')}
-                      className="px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-amber-300 font-mono rounded border border-zinc-800 text-[11px]"
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-amber-300 font-mono rounded border border-zinc-800 text-[11px]"
                       title="Obsidian 双向关联链接 [[知识点]]"
                     >
-                      🔗 [[双链]]
+                      <IconLink className="w-3 h-3" />
+                      <span>[[双链]]</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleInsertSnippet('\n- [ ] ', '', '待复习关键题型')}
-                      className="px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-300 rounded border border-zinc-800 text-[11px]"
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-300 rounded border border-zinc-800 text-[11px]"
                       title="任务清单"
                     >
-                      ☑️ 清单
+                      <IconCheckSquare className="w-3 h-3" />
+                      <span>清单</span>
                     </button>
                   </div>
 
@@ -3879,7 +3910,7 @@ const App: React.FC = () => {
                           }`}
                         >
                           <IconAI className="w-3.5 h-3.5" />
-                          <span>💎 Gemini 伴学</span>
+                          <span>Gemini 伴学</span>
                         </button>
                         <button
                           type="button"
@@ -3891,7 +3922,7 @@ const App: React.FC = () => {
                           }`}
                         >
                           <IconPin className="w-3.5 h-3.5" />
-                          <span>📌 划词批注 ({taskAnnotations.length})</span>
+                          <span>划词批注 ({taskAnnotations.length})</span>
                           {isAnsweringAnnotation && (
                             <span className="w-2 h-2 rounded-full bg-amber-300 animate-ping" />
                           )}
@@ -3930,7 +3961,7 @@ const App: React.FC = () => {
                           <div className="text-center py-10 text-zinc-500">
                             <IconPin className="w-9 h-9 text-zinc-600 mx-auto mb-2 opacity-50" />
                             <p className="text-xs font-medium text-zinc-400">当前节暂无划词批注</p>
-                            <p className="text-[11px] text-zinc-500 mt-1">在左侧讲义划选不懂的概念，点击「⚡ 即刻释义」或「🗣️ 大白话重讲」</p>
+                            <p className="text-[11px] text-zinc-500 mt-1">在左侧讲义划选不懂的概念，点击「即刻释义」或「大白话重讲」</p>
                           </div>
                         ) : (
                           <div className="space-y-3">
@@ -3960,7 +3991,7 @@ const App: React.FC = () => {
 
                                 {ann.comment && (
                                   <div className="text-[11px] font-bold text-zinc-300 flex items-start gap-1.5 bg-zinc-950/60 p-2 rounded-lg border border-zinc-800/80">
-                                    <span className="text-amber-400 font-black flex-shrink-0">💬</span>
+                                    <IconMessage className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
                                     <span>{ann.comment}</span>
                                   </div>
                                 )}
@@ -3980,7 +4011,8 @@ const App: React.FC = () => {
                                             className="text-[10px] font-bold text-emerald-300 hover:text-emerald-200 flex items-center gap-1 px-2 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all active:scale-95"
                                             title="智能匹配原文位置，将此批注作为 Callout 卡片嵌入讲义对应段落下方并同步 Obsidian"
                                           >
-                                            <span>📥 原位嵌入讲义</span>
+                                            <IconDownload className="w-3 h-3" />
+                                            <span>原位嵌入讲义</span>
                                           </button>
                                           <button
                                             type="button"
@@ -4157,7 +4189,7 @@ const App: React.FC = () => {
                 className="px-5 py-2 text-xs font-black text-zinc-950 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-md shadow-amber-500/20 active:scale-95 flex items-center gap-1.5"
               >
                 <IconSparkles className="w-3.5 h-3.5 text-zinc-950" />
-                <span>⚡ 提交并获取 AI 即时解答</span>
+                <span>提交并获取 AI 即时解答</span>
               </button>
             </div>
           </div>
@@ -4510,7 +4542,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2">
               <span className={`w-2.5 h-2.5 rounded-full ${activeBuildingJob.error ? 'bg-rose-400' : activeBuildingJob.isDone ? 'bg-emerald-400' : 'bg-amber-400 animate-ping'}`} />
               <span className={`text-xs font-black ${activeBuildingJob.error ? 'text-rose-300' : activeBuildingJob.isDone ? 'text-emerald-300' : 'text-amber-300'}`}>
-                {activeBuildingJob.error ? '构建失败' : activeBuildingJob.isDone ? '🎉 知识图谱已构建完成' : '⚡ AI 正在构建知识图谱'}
+                {activeBuildingJob.error ? '构建失败' : activeBuildingJob.isDone ? '知识图谱已构建完成' : 'AI 正在构建知识图谱'}
               </span>
             </div>
             <span className="text-xs font-mono font-bold text-amber-400">{activeBuildingJob.percent}%</span>

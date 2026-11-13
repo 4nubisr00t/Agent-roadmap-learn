@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { IconSettings, IconClose, IconAI, IconLightning, IconCheck, IconLayers, IconSparkles } from '../Icons.js';
+import { IconSettings, IconClose, IconAI, IconLightning, IconCheck, IconLayers, IconSparkles, IconGraduationCap, IconCpu, IconLightbulb, IconArrowUpRight } from '../Icons.js';
 
 export interface AIProviderPreset {
   id: string;
@@ -381,7 +381,7 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
                   : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
               }`}
             >
-              <span>🎓</span>
+              <IconGraduationCap className="w-4 h-4" />
               <span>课堂伴学导师 (Gemini / 实时问答)</span>
             </button>
             <button
@@ -393,19 +393,21 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
                   : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
               }`}
             >
-              <span>🏗️</span>
+              <IconCpu className="w-4 h-4" />
               <span>教材建树引擎 (Anubis 反代网关)</span>
             </button>
           </div>
 
           <div className="text-[11px] text-zinc-400 mt-2 pb-2">
             {activeSlot === 'mentor' ? (
-              <span className="text-amber-400/90 font-medium">
-                💡 <b>伴学导师职责</b>：专门响应上课划词答疑、卡片实时伴学追问、随堂笔记解析，推荐配置 <b>Google Gemini</b> 或 <b>DeepSeek</b>。
+              <span className="text-amber-400/90 font-medium inline-flex items-center gap-1.5 flex-wrap">
+                <IconLightbulb className="w-3.5 h-3.5 shrink-0" />
+                <span><b>伴学导师职责</b>：专门响应上课划词答疑、卡片实时伴学追问、随堂笔记解析，推荐配置 <b>Google Gemini</b> 或 <b>DeepSeek</b>。</span>
               </span>
             ) : (
-              <span className="text-emerald-400/90 font-medium">
-                ⚡ <b>建树引擎职责</b>：专门承接大部头教材分章解构、全量知识节点生成与依赖拓扑推演，默认锁定<b>自有反代网关 (0 Token 成本)</b>。
+              <span className="text-emerald-400/90 font-medium inline-flex items-center gap-1.5 flex-wrap">
+                <IconLightning className="w-3.5 h-3.5 shrink-0" />
+                <span><b>建树引擎职责</b>：专门承接大部头教材分章解构、全量知识节点生成与依赖拓扑推演，默认锁定<b>自有反代网关 (0 Token 成本)</b>。</span>
               </span>
             )}
           </div>
@@ -427,7 +429,7 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
                   className="text-[11px] text-amber-400 hover:text-amber-300 font-medium underline flex items-center gap-1"
                 >
                   <span>获取官方密钥</span>
-                  <span>↗</span>
+                  <IconArrowUpRight className="w-3 h-3" />
                 </a>
               )}
             </div>
@@ -493,8 +495,9 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
                   大模型访问密钥 (API Key)
                 </label>
                 {isHostedByServer && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                    🟢 服务端已托管密钥 · 留空即用
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span>服务端已托管密钥 · 留空即用</span>
                   </span>
                 )}
               </div>
