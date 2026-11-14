@@ -88,6 +88,7 @@ export const TaskService = {
           id: generateTaskId(),
           projectId,
           title: data.title,
+          ...(data.subtitle ? { subtitle: data.subtitle } : {}),
           description: data.description,
           status: 'todo',
           priority: data.priority ?? 'medium',

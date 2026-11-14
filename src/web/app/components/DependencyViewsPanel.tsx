@@ -78,6 +78,7 @@ interface DependencyViewMutationResponse {
 interface TaskItem {
   id: string;
   title: string;
+  subtitle?: string;
   status: string;
   priority: 'low' | 'medium' | 'high' | 'critical';
   description?: string;
@@ -784,9 +785,9 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
         onClick={() => (data as any).onSelect?.()}
         title="点击查看课程详细讲义"
       >
-        <p className={`font-bold text-zinc-100 leading-snug line-clamp-2 hover:text-amber-300 transition-colors ${isCompact ? 'text-[13px]' : 'text-sm'}`}>{task.title}</p>
-        {!isCompact && task.description && (
-          <p className="text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed">{task.description}</p>
+        <p className={`font-bold text-zinc-100 leading-snug line-clamp-2 hover:text-amber-300 transition-colors ${isCompact ? 'text-[13px]' : 'text-[15px]'}`}>{task.title}</p>
+        {!isCompact && (task.subtitle || task.description) && (
+          <p className="text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed">{task.subtitle || task.description}</p>
         )}
         {!isCompact && task.tags.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">

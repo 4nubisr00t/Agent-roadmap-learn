@@ -1020,9 +1020,14 @@ export const SolarObservatoryView: React.FC<SolarObservatoryViewProps> = ({
             </button>
           </div>
 
-          <h3 className="text-sm sm:text-base font-black text-zinc-100 leading-snug mb-2">
+          <h3 className={`text-base sm:text-lg font-black text-zinc-50 leading-snug ${selectedPlanet.task.subtitle ? 'mb-0.5' : 'mb-2'}`}>
             {selectedPlanet.task.title}
           </h3>
+          {selectedPlanet.task.subtitle && (
+            <p className="text-xs text-amber-200/85 font-medium leading-snug mb-2.5 line-clamp-2">
+              {selectedPlanet.task.subtitle}
+            </p>
+          )}
 
           {/* Upstream & Downstream Mini Links */}
           <div className="space-y-1.5 mb-3.5 text-[11px]">

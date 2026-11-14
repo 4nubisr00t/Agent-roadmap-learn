@@ -138,7 +138,7 @@ export class ProjectStorage {
         {
           id: `view_${Date.now()}`,
           projectId,
-          name: '🌟 技能拓扑树',
+          name: '技能拓扑树',
           description: '主技能学习路线拓扑图',
           dimension: null,
           createdAt: now,

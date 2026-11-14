@@ -25,6 +25,7 @@ export interface Task {
   id: string;
   projectId: string;
   title: string;
+  subtitle?: string; // One-line descriptive subtitle shown beneath the concise title
   description: string;
   status: TaskStatus;
   priority: TaskPriority;

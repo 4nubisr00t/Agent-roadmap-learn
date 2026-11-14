@@ -115,6 +115,7 @@ export class BookPipelineService {
     tasks: Array<{
       id: string;
       title: string;
+      subtitle?: string;
       description: string;
       milestoneId: string;
       priority: 'critical' | 'high' | 'medium' | 'low';
@@ -236,9 +237,21 @@ ${chapterListBrief}
 
     const step2System = `你是一位顶级知识拓扑架构师与课程设计师。
 请根据全书目录与阶段规划，为《${topicName}》提取 8~16 个核心攻坚知识节点（Tasks），并推演各节点之间的前置依赖关系（Dependencies）。
+
+【标题规范 —— 非常重要】
+每个节点的卡片有「主标题 + 副标题」两层，务必分工明确：
+- title（主标题）：精练的概念名，纯名词短语，4~12 个汉字（英文术语可保留，如 "ret2libc"），一眼能认出这是什么。
+  * 严禁出现编号前缀（如 "节点 1.1："、"第3章"、"1.2-1.3"），严禁出现冒号、括号、破折号、顿号并列、"与…"连接多个主题。
+  * 好例子："栈帧与调用约定"、"Canary 机制"、"堆溢出基础"、"B+ 树索引"、"冯·诺依曼结构"。
+  * 坏例子："节点 2.1：Canary 栈金丝雀机制与信息泄露突破 (Canary Leak & Bypass)"（这种长句应放进 subtitle）。
+- subtitle（副标题）：一句话讲清「这个节点学什么、解决什么问题」，15~40 个汉字，可以包含冒号前后的关键技术点、对比关系、核心结论，信息量要比主标题大。
+  * 示例：主标题「Canary 机制」→ 副标题「栈金丝雀的工作原理，以及信息泄露与逐字节爆破两种绕过思路」。
+- 所有字段内不要使用 emoji 或装饰性符号。
+
 每个节点必须包含：
 - id: 唯一标识（例如 "t_1", "t_2"）
-- title: 节点标题（标明关键技术点）
+- title: 主标题（见上方规范）
+- subtitle: 副标题（见上方规范）
 - milestoneId: 归属的阶段 ID（如 "m1", "m2"）
 - chapterIndex: 对应的章节编号（整数，如 1, 2）
 - summary: 1~2 句话的核心攻坚方向与概念摘要
@@ -252,7 +265,8 @@ ${chapterListBrief}
   "tasks": [
     {
       "id": "t_1",
-      "title": "栈帧平衡与函数调用约定",
+      "title": "栈帧与调用约定",
+      "subtitle": "函数调用时栈底、栈顶指针的平衡原理，以及参数传递与返回流程",
       "milestoneId": "m1",
       "chapterIndex": 1,
       "summary": "掌握栈底指针与栈顶指针在函数调用、参数传递及返回过程中的底层平衡原理",
@@ -279,6 +293,7 @@ ${bookData.chapters.map(c => `第 ${c.index} 章: ${c.title} (页码: ${c.page_r
     let allTasks: Array<{
       id: string;
       title: string;
+      subtitle?: string;
       description: string;
       milestoneId: string;
       priority: 'critical' | 'high' | 'medium' | 'low';
@@ -299,7 +314,7 @@ ${bookData.chapters.map(c => `第 ${c.index} 章: ${c.title} (页码: ${c.page_r
           const chTitle = ch?.title || `第 ${chIdx} 章`;
           const chPageRange = ch?.page_range || '全书';
 
-          const initialDescription = `### 📖 章节定位\n归属原书：第 ${chIdx} 章《${chTitle}》（页码范围：${chPageRange}）\n\n### 🎯 学习目标与攻坚方向\n${t.summary || '掌握本章节的核心技术机制与体系逻辑。'}\n\n---\n> 💡 **Gemini 专属学伴导学**：本节点已就绪！点击上方「💎 唤醒 Gemini 导师深度精讲」，即可调用 Gemini 3.8 Flash 结合本章教材原书正文生成生动通透的系统化讲义。`;
+          const initialDescription = `### 章节定位\n归属原书：第 ${chIdx} 章《${chTitle}》（页码范围：${chPageRange}）\n\n### 学习目标与攻坚方向\n${t.summary || '掌握本章节的核心技术机制与体系逻辑。'}\n\n---\n> **Gemini 专属学伴导学**：本节点已就绪！点击上方「Gemini 精讲点亮」，即可调用 Gemini 3.8 Flash 结合本章教材原书正文生成生动通透的系统化讲义。`;
 
           const tags = Array.isArray(t.tags) && t.tags.length > 0 ? t.tags : [`第${chIdx}章`, '核心考点'];
           if (!tags.some((tag: string) => tag.includes('章'))) {
@@ -309,6 +324,7 @@ ${bookData.chapters.map(c => `第 ${c.index} 章: ${c.title} (页码: ${c.page_r
           allTasks.push({
             id: t.id || `t_${idx + 1}`,
             title: t.title || `${chTitle} - 核心知识点`,
+            subtitle: t.subtitle || t.summary || '',
             description: initialDescription,
             milestoneId: t.milestoneId || chapterToMilestoneMap[chIdx] || milestones[0]?.id || 'm1',
             priority: t.priority || 'high',
@@ -326,8 +342,9 @@ ${bookData.chapters.map(c => `第 ${c.index} 章: ${c.title} (页码: ${c.page_r
         const msId = chapterToMilestoneMap[ch.index] || milestones[Math.min(milestones.length - 1, Math.floor((idx / bookData.chapters.length) * milestones.length))]?.id || 'm1';
         allTasks.push({
           id: `t_${ch.index}`,
-          title: `第 ${ch.index} 章: ${ch.title}`,
-          description: `### 📖 章节定位\n归属原书：第 ${ch.index} 章《${ch.title}》（页码范围：${ch.page_range}）\n\n### 🎯 学习目标与攻坚方向\n深入掌握第 ${ch.index} 章《${ch.title}》的核心原理与技术要点。\n\n---\n> 💡 **Gemini 专属学伴导学**：本节点已就绪！点击上方「💎 唤醒 Gemini 导师深度精讲」，即可调用 Gemini 3.8 Flash 结合本章教材原书正文生成生动通透的系统化讲义。`,
+          title: ch.title,
+          subtitle: `原书第 ${ch.index} 章（${ch.page_range}）核心原理与技术要点`,
+          description: `### 章节定位\n归属原书：第 ${ch.index} 章《${ch.title}》（页码范围：${ch.page_range}）\n\n### 学习目标与攻坚方向\n深入掌握第 ${ch.index} 章《${ch.title}》的核心原理与技术要点。\n\n---\n> **Gemini 专属学伴导学**：本节点已就绪！点击上方「Gemini 精讲点亮」，即可调用 Gemini 3.8 Flash 结合本章教材原书正文生成生动通透的系统化讲义。`,
           milestoneId: msId,
           priority: 'high',
           tags: [`第${ch.index}章`, '原书章节'],

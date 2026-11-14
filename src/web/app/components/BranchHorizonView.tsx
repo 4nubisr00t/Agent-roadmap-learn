@@ -19,6 +19,7 @@ import {
 export interface HorizonTaskItem {
   id: string;
   title: string;
+  subtitle?: string;
   status: string;
   priority: 'low' | 'medium' | 'high' | 'critical';
   description?: string;
@@ -401,9 +402,14 @@ export const BranchHorizonView: React.FC<BranchHorizonViewProps> = ({
               </button>
             </div>
 
-            <h2 className="text-xl sm:text-2xl font-black text-zinc-100 tracking-tight leading-snug mb-2.5">
+            <h2 className={`text-2xl sm:text-3xl font-black text-zinc-50 tracking-tight leading-tight ${focusTask.subtitle ? 'mb-1.5' : 'mb-2.5'}`}>
               {focusTask.title}
             </h2>
+            {focusTask.subtitle && (
+              <p className="text-sm sm:text-base font-semibold text-amber-200/90 leading-snug mb-3">
+                {focusTask.subtitle}
+              </p>
+            )}
 
             {focusBlockedBy.length > 0 && (
               <div className="mb-3 px-3 py-2 rounded-xl bg-amber-950/35 border border-amber-500/30 text-[11px] text-amber-200 font-medium">
@@ -411,9 +417,12 @@ export const BranchHorizonView: React.FC<BranchHorizonViewProps> = ({
               </div>
             )}
 
-            <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed mb-4">
-              {extractBriefExcerpt(focusTask.description)}
-            </p>
+            {!focusTask.subtitle && (
+              <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed mb-4">
+                {extractBriefExcerpt(focusTask.description)}
+              </p>
+            )}
+            {focusTask.subtitle && <div className="mb-3" />}
 
             {focusTask.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-5">
@@ -591,11 +600,11 @@ export const BranchHorizonView: React.FC<BranchHorizonViewProps> = ({
                           <IconChevronRight className="w-3.5 h-3.5" />
                         </span>
                       </div>
-                      <h4 className="text-sm font-black text-zinc-100 group-hover:text-amber-200 transition-colors leading-snug mb-1.5">
+                      <h4 className="text-base font-black text-zinc-50 group-hover:text-amber-200 transition-colors leading-snug mb-1">
                         {branch.title}
                       </h4>
-                      <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed">
-                        {extractBriefExcerpt(branch.description)}
+                      <p className="text-[12px] text-zinc-400 line-clamp-2 leading-relaxed">
+                        {branch.subtitle || extractBriefExcerpt(branch.description)}
                       </p>
                     </div>
 

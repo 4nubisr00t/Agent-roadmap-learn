@@ -89,6 +89,7 @@ interface AppMeta {
 interface Task {
   id: string;
   title: string;
+  subtitle?: string;
   status: string;
   priority: string;
   description?: string;
@@ -699,6 +700,7 @@ const App: React.FC = () => {
           projectId: tasks.find(t => t.task.id === editingTask.id)?.project.id,
           taskId: editingTask.id,
           title: editingTask.title,
+          subtitle: editingTask.subtitle ?? '',
           description: editingTask.description,
           status: normalizeStatus(editingTask.status),
           priority: editingTask.priority,
@@ -1759,6 +1761,9 @@ const App: React.FC = () => {
         >
           {task.title}
         </h3>
+        {cardMode === 'detailed' && task.subtitle && (
+          <p className="text-[11px] text-zinc-400 leading-snug mt-1 line-clamp-2">{task.subtitle}</p>
+        )}
         
         {cardMode === 'detailed' && task.tags && task.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2 mb-0.5">
@@ -3248,6 +3253,9 @@ const App: React.FC = () => {
                 <h2 className="text-base sm:text-lg font-black text-zinc-100 tracking-tight truncate">
                   {editingTask.title}
                 </h2>
+                {editingTask.subtitle && (
+                  <p className="text-[11px] sm:text-xs text-zinc-400 font-medium truncate mt-0.5">{editingTask.subtitle}</p>
+                )}
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0">
@@ -3594,14 +3602,21 @@ const App: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center bg-zinc-900/80 p-3 rounded-2xl border border-zinc-800/80">
                     <div className="md:col-span-6">
                       <label className="block text-[10px] font-black uppercase tracking-wider text-amber-400 mb-1">
-                        知识课题名称
+                        知识课题名称（主标题）与副标题
                       </label>
                       <input
                         type="text"
                         value={editingTask.title}
                         onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
                         className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 text-zinc-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50 font-bold"
-                        placeholder="输入知识点标题"
+                        placeholder="精练的主标题，如：Canary 机制"
+                      />
+                      <input
+                        type="text"
+                        value={editingTask.subtitle ?? ''}
+                        onChange={(e) => setEditingTask({ ...editingTask, subtitle: e.target.value })}
+                        className="mt-1.5 w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 text-zinc-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500/50"
+                        placeholder="一句话副标题，说明学什么、解决什么问题"
                       />
                     </div>
                     <div className="md:col-span-3">

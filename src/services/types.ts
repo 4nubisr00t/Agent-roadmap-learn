@@ -40,6 +40,7 @@ export type ServiceResult<T> =
 
 export interface CreateTaskData {
   title: string;
+  subtitle?: string;
   description: string;
   priority?: TaskPriority;
   tags?: string[];
@@ -49,6 +50,7 @@ export interface CreateTaskData {
 
 export interface UpdateTaskData {
   title?: string;
+  subtitle?: string;
   description?: string;
   status?: TaskStatus;
   priority?: TaskPriority;

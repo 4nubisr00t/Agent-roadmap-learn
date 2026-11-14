@@ -1065,6 +1065,7 @@ export function createServer(port: number = 7860): Promise<Server> {
             id: newTaskId,
             projectId,
             title: t.title,
+            subtitle: t.subtitle || '',
             description: t.description || '',
             status: idx === 0 ? ('in-progress' as const) : ('todo' as const),
             priority: t.priority || 'medium',
@@ -1111,7 +1112,7 @@ export function createServer(port: number = 7860): Promise<Server> {
         const dependencyView = {
           id: graphId,
           projectId,
-          name: '🌟 技能拓扑树',
+          name: '技能拓扑树',
           description: `基于《${finalProjectName}》由沙箱与大模型深度解构构建的认知进阶路径`,
           dimension: null,
           revision: 1,
