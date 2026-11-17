@@ -99,10 +99,10 @@ export const AIRoadmapGeneratorModal: React.FC<AIRoadmapGeneratorModalProps> = (
           rawMaterialText: rawText.trim(),
           topicName: topicName.trim(),
           targetLevel,
-          provider: aiConfig?.buildEngine?.providerId || aiConfig?.providerId,
-          baseUrl: aiConfig?.buildEngine?.baseUrl || aiConfig?.baseUrl,
-          apiKey: aiConfig?.buildEngine?.apiKey || aiConfig?.apiKey,
-          model: aiConfig?.buildEngine?.model || aiConfig?.model,
+          provider: aiConfig?.providerId || aiConfig?.buildEngine?.providerId,
+          baseUrl: aiConfig?.baseUrl || aiConfig?.buildEngine?.baseUrl,
+          apiKey: aiConfig?.apiKey || aiConfig?.buildEngine?.apiKey,
+          model: aiConfig?.model || aiConfig?.buildEngine?.model,
         }),
       });
 

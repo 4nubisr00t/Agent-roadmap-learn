@@ -40,13 +40,15 @@ export function loadDotEnv(candidatePaths?: string[]): void {
 export interface AIProviderPreset {
   id: string;
   name: string;
-  icon: string;
+  code: string;
+  tag: string;
   baseUrl: string;
   defaultModel: string;
   models: string[];
   description: string;
   needApiKey: boolean;
   websiteUrl?: string;
+  apiKeyPlaceholder?: string;
 }
 
 export const DEFAULT_HUMAN_MENTOR_PROMPT = `你是一位极富人情味、生动透彻、通俗且直击底层本质的大学顶尖伴学导师。
@@ -61,64 +63,66 @@ export const DEFAULT_HUMAN_MENTOR_PROMPT = `你是一位极富人情味、生动
 
 export const PRESET_PROVIDERS: AIProviderPreset[] = [
   {
-    id: 'vertex-gemini',
-    name: 'Google Vertex AI (Gemini 3.8 Flash 专属伴学)',
-    icon: '💎',
-    baseUrl: 'https://aiplatform.googleapis.com/v1/publishers/google/models',
-    defaultModel: 'gemini-3.8-flash',
-    models: ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'],
-    description: 'Google Cloud Vertex AI 专属极速通道，Gemini 3.8 Flash 最具人情味、响应如闪电',
-    needApiKey: true,
-    websiteUrl: 'https://console.cloud.google.com/vertex-ai',
-  },
-  {
-    id: 'anubis-gateway',
-    name: 'Anubis DeepSeek Gateway (自有反代网关)',
-    icon: '⚡',
-    baseUrl: 'https://api.anubisroot.top/v1',
-    defaultModel: 'deepseek-v4.1-flash',
-    models: ['deepseek-v4.1-flash', 'deepseek-v4-pro'],
-    description: '主机本地 8000 端口直连 DeepSeek V4 反代网关，零 Token 计费成本，内置 800K 上下文与原生多模态',
-    needApiKey: true,
-    websiteUrl: 'https://api.anubisroot.top',
-  },
-  {
-    id: 'gemini',
-    name: 'Google Gemini (OpenAI 协议)',
-    icon: '💎',
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-    defaultModel: 'gemini-2.0-flash',
-    models: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
-    description: 'Google 官方 OpenAI 兼容接口，极速且支持超长上下文（适合课堂实时互动）',
-    needApiKey: true,
-    websiteUrl: 'https://aistudio.google.com',
-  },
-  {
     id: 'deepseek',
-    name: 'DeepSeek (深度求索官方)',
-    icon: '🚀',
+    name: 'DeepSeek',
+    code: 'DS',
+    tag: '官方直连',
     baseUrl: 'https://api.deepseek.com/v1',
     defaultModel: 'deepseek-chat',
     models: ['deepseek-chat', 'deepseek-reasoner'],
-    description: '国内推理与代码能力顶尖，性价比极高',
+    description: '深度求索官方接口，推理与代码实战表现卓越，超高性价比（DeepSeek-V3 / R1）',
     needApiKey: true,
     websiteUrl: 'https://platform.deepseek.com',
+    apiKeyPlaceholder: 'sk-...',
+  },
+  {
+    id: 'gemini',
+    name: 'Google Gemini',
+    code: 'GEMINI',
+    tag: '超长上下文',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+    defaultModel: 'gemini-2.5-flash',
+    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro'],
+    description: 'Google 官方 OpenAI 兼容端点，毫秒级流式响应，支持百万级超长教材上下文',
+    needApiKey: true,
+    websiteUrl: 'https://aistudio.google.com',
+    apiKeyPlaceholder: 'AIzaSy...',
   },
   {
     id: 'openai',
-    name: 'OpenAI (ChatGPT)',
-    icon: '🌐',
+    name: 'OpenAI',
+    code: 'OAI',
+    tag: '行业基准',
     baseUrl: 'https://api.openai.com/v1',
     defaultModel: 'gpt-4o',
-    models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini', 'o1-mini', 'gpt-4-turbo'],
-    description: 'OpenAI 官方大模型，全球通用智能基准',
+    models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini', 'o1', 'gpt-4-turbo'],
+    description: '全球大模型行业标杆，逻辑推导与复杂指令遵循能力强劲',
     needApiKey: true,
     websiteUrl: 'https://platform.openai.com',
+    apiKeyPlaceholder: 'sk-...',
+  },
+  {
+    id: 'claude',
+    name: 'Anthropic Claude',
+    code: 'CLAUDE',
+    tag: '学术与代码',
+    baseUrl: 'https://api.anthropic.com/v1',
+    defaultModel: 'claude-3-7-sonnet-20250219',
+    models: [
+      'claude-3-7-sonnet-20250219',
+      'claude-3-5-sonnet-20241022',
+      'claude-3-5-haiku-20241022',
+    ],
+    description: 'Anthropic 前沿旗舰模型，擅长超长代码审阅与严谨数理推导',
+    needApiKey: true,
+    websiteUrl: 'https://console.anthropic.com',
+    apiKeyPlaceholder: 'sk-ant-...',
   },
   {
     id: 'siliconflow',
     name: 'SiliconFlow (硅基流动)',
-    icon: '⚡',
+    code: 'SILICON',
+    tag: '国内高并发',
     baseUrl: 'https://api.siliconflow.cn/v1',
     defaultModel: 'deepseek-ai/DeepSeek-V3',
     models: [
@@ -127,68 +131,106 @@ export const PRESET_PROVIDERS: AIProviderPreset[] = [
       'Qwen/Qwen2.5-72B-Instruct',
       'Qwen/Qwen2.5-Coder-32B-Instruct',
     ],
-    description: '国内高并发大模型聚合平台，稳定免翻',
+    description: '国内高并发大模型聚合平台，稳定免翻墙，提供多规格 DeepSeek 与 Qwen 系列',
     needApiKey: true,
     websiteUrl: 'https://siliconflow.cn',
+    apiKeyPlaceholder: 'sk-...',
   },
   {
     id: 'moonshot',
-    name: 'Moonshot AI (月之暗面 / Kimi)',
-    icon: '🌙',
+    name: 'Moonshot AI (Kimi)',
+    code: 'KIMI',
+    tag: '长文研读',
     baseUrl: 'https://api.moonshot.cn/v1',
     defaultModel: 'moonshot-v1-8k',
     models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
-    description: '长文本与中文场景理解专家',
+    description: '专精超长文本理解与中文多轮伴学，擅长整本教材深度解构',
     needApiKey: true,
     websiteUrl: 'https://platform.moonshot.cn',
+    apiKeyPlaceholder: 'sk-...',
   },
   {
     id: 'zhipu',
-    name: 'Zhipu AI (智谱清言)',
-    icon: '🧠',
+    name: 'Zhipu AI (智谱 GLM)',
+    code: 'GLM',
+    tag: '自主基座',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     defaultModel: 'glm-4-flash',
-    models: ['glm-4-flash', 'glm-4-plus', 'glm-4-air'],
-    description: '清华智谱国产自主可控基座大模型',
+    models: ['glm-4-flash', 'glm-4-plus', 'glm-4-air', 'glm-4-long'],
+    description: '清华智谱国产自主可控基座大模型，中文知识面广',
     needApiKey: true,
     websiteUrl: 'https://open.bigmodel.cn',
+    apiKeyPlaceholder: 'key.secret',
   },
   {
     id: 'openrouter',
-    name: 'OpenRouter (全球聚合路由)',
-    icon: '🔀',
+    name: 'OpenRouter',
+    code: 'ROUTER',
+    tag: '全球路由',
     baseUrl: 'https://openrouter.ai/api/v1',
     defaultModel: 'deepseek/deepseek-chat',
     models: [
       'deepseek/deepseek-chat',
+      'deepseek/deepseek-r1',
       'anthropic/claude-3.5-sonnet',
       'openai/gpt-4o',
-      'meta-llama/llama-3.3-70b-instruct',
+      'google/gemini-2.0-flash-exp:free',
     ],
-    description: '全球多模型统一 API 路由，支持 Claude、Llama 等',
+    description: '全球主流多模型统一 API 路由，一键调用各类前沿大模型',
     needApiKey: true,
     websiteUrl: 'https://openrouter.ai',
+    apiKeyPlaceholder: 'sk-or-...',
   },
   {
     id: 'ollama',
-    name: 'Ollama (本地离线私有化)',
-    icon: '🦙',
+    name: 'Ollama 本地模型',
+    code: 'OLLAMA',
+    tag: '离线免密',
     baseUrl: 'http://localhost:11434/v1',
-    defaultModel: 'qwen2.5-coder:7b',
-    models: ['qwen2.5-coder:7b', 'deepseek-r1:8b', 'llama3.2:3b'],
-    description: '本地私有化部署，数据不出本机，无需 API Key',
+    defaultModel: 'deepseek-r1:8b',
+    models: ['deepseek-r1:8b', 'qwen2.5-coder:7b', 'llama3.3:latest'],
+    description: '本地私有化部署，数据物理隔绝不出本机，完全免费且无需 API Key',
     needApiKey: false,
     websiteUrl: 'https://ollama.com',
+    apiKeyPlaceholder: '本地无需密钥',
+  },
+  {
+    id: 'anubis-gateway',
+    name: 'Anubis Gateway (主机托管)',
+    code: 'GATEWAY',
+    tag: '内置开箱即用',
+    baseUrl: 'https://api.anubisroot.top/v1',
+    defaultModel: 'deepseek-v4.1-flash',
+    models: ['deepseek-v4.1-flash', 'deepseek-v4-pro'],
+    description: '服务器主机内置反代网关，免配置密钥，开箱即用零计费成本',
+    needApiKey: true,
+    websiteUrl: 'https://api.anubisroot.top',
+    apiKeyPlaceholder: '已内置托管密钥',
+  },
+  {
+    id: 'vertex-gemini',
+    name: 'Google Vertex AI',
+    code: 'VERTEX',
+    tag: '云端直通',
+    baseUrl: 'https://aiplatform.googleapis.com/v1/publishers/google/models',
+    defaultModel: 'gemini-3.8-flash',
+    models: ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'],
+    description: 'Google Cloud Vertex AI 原生通道，支持超长上下文与极速响应',
+    needApiKey: true,
+    websiteUrl: 'https://console.cloud.google.com/vertex-ai',
+    apiKeyPlaceholder: 'AQ....',
   },
   {
     id: 'custom',
-    name: '自定义供应商 (Custom API)',
-    icon: '🛠️',
+    name: '自定义 API (OpenAI 兼容)',
+    code: 'CUSTOM',
+    tag: '自由配置',
     baseUrl: '',
     defaultModel: '',
     models: [],
-    description: '支持任何符合 OpenAI 规范的自定义代理或中转站',
+    description: '支持任何符合 OpenAI 规范的私有部署网关、OneAPI、NewAPI 或自定义中转站',
     needApiKey: true,
+    apiKeyPlaceholder: 'sk-...',
   },
 ];
 
@@ -510,15 +552,23 @@ export class AIService {
       if (config.provider === 'anubis-gateway' || baseUrl.includes('anubisroot.top') || baseUrl.includes('127.0.0.1:8000')) {
         apiKey = ANUBIS_GATEWAY_KEY;
       } else if (config.provider === 'deepseek' || baseUrl.includes('deepseek')) {
-        apiKey = process.env.DEEPSEEK_API_KEY || ANUBIS_GATEWAY_KEY;
+        apiKey = process.env.DEEPSEEK_API_KEY || '';
       } else if (config.provider === 'gemini' || baseUrl.includes('generativelanguage')) {
         apiKey = process.env.GEMINI_API_KEY || '';
       } else if (config.provider === 'openai' || baseUrl.includes('openai.com')) {
         apiKey = process.env.OPENAI_API_KEY || '';
+      } else if (config.provider === 'claude' || baseUrl.includes('anthropic')) {
+        apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || '';
       } else if (config.provider === 'siliconflow' || baseUrl.includes('siliconflow')) {
         apiKey = process.env.SILICONFLOW_API_KEY || '';
-      } else {
-        apiKey = ANUBIS_GATEWAY_KEY;
+      } else if (config.provider === 'moonshot' || baseUrl.includes('moonshot')) {
+        apiKey = process.env.MOONSHOT_API_KEY || '';
+      } else if (config.provider === 'zhipu' || baseUrl.includes('bigmodel')) {
+        apiKey = process.env.ZHIPU_API_KEY || '';
+      } else if (config.provider === 'openrouter' || baseUrl.includes('openrouter')) {
+        apiKey = process.env.OPENROUTER_API_KEY || '';
+      } else if (config.provider === 'ollama' || baseUrl.includes('localhost:11434')) {
+        apiKey = '';
       }
     }
 

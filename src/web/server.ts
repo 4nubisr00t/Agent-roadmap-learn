@@ -207,21 +207,30 @@ export function createServer(port: number = 7860): Promise<Server> {
     const getAiConfigFile = (userId?: string) =>
       path.join(aiConfigDir, userId ? `ai-config-${userId}.json` : 'ai-config-default.json');
 
-    const defaultDualConfig = () => ({
+    const defaultAIConfig = () => ({
+      providerId: 'deepseek',
+      baseUrl: 'https://api.deepseek.com/v1',
+      apiKey: '',
+      model: 'deepseek-chat',
+      temperature: 0.7,
+      maxTokens: 4096,
+      systemPromptPreset: 'mentor',
+      customSystemPrompt: '',
       mentorEngine: {
-        providerId: 'vertex-gemini',
-        baseUrl: 'https://aiplatform.googleapis.com/v1/publishers/google/models',
+        providerId: 'deepseek',
+        baseUrl: 'https://api.deepseek.com/v1',
         apiKey: '',
-        model: 'gemini-3.8-flash',
+        model: 'deepseek-chat',
         systemPrompt: '',
       },
       buildEngine: {
-        providerId: 'anubis-gateway',
-        baseUrl: 'https://api.anubisroot.top/v1',
+        providerId: 'deepseek',
+        baseUrl: 'https://api.deepseek.com/v1',
         apiKey: '',
-        model: 'deepseek-v4.1-flash',
+        model: 'deepseek-chat',
       },
     });
+    const defaultDualConfig = defaultAIConfig;
 
     const cleanMarkdownFence = (text: string): string => {
       let c = text.trim();
@@ -331,14 +340,33 @@ export function createServer(port: number = 7860): Promise<Server> {
           ? [getAiConfigFile(user.id), getAiConfigFile()]
           : [getAiConfigFile()];
 
-        let savedConfig = defaultDualConfig();
+        let savedConfig = defaultAIConfig();
         for (const filePath of candidateFiles) {
           if (fs.existsSync(filePath)) {
             try {
               const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+              const providerId = parsed.providerId || parsed.mentorEngine?.providerId || savedConfig.providerId;
+              const baseUrl = parsed.baseUrl || parsed.mentorEngine?.baseUrl || savedConfig.baseUrl;
+              const apiKey = parsed.apiKey !== undefined ? parsed.apiKey : (parsed.mentorEngine?.apiKey || '');
+              const model = parsed.model || parsed.mentorEngine?.model || savedConfig.model;
+              const temperature = parsed.temperature ?? savedConfig.temperature;
+              const maxTokens = parsed.maxTokens ?? savedConfig.maxTokens;
+              const systemPromptPreset = parsed.systemPromptPreset || savedConfig.systemPromptPreset;
+              const customSystemPrompt = parsed.customSystemPrompt || '';
+
+              const unified = { providerId, baseUrl, apiKey, model };
+
               savedConfig = {
-                mentorEngine: { ...savedConfig.mentorEngine, ...(parsed.mentorEngine || {}) },
-                buildEngine: { ...savedConfig.buildEngine, ...(parsed.buildEngine || {}) },
+                providerId,
+                baseUrl,
+                apiKey,
+                model,
+                temperature,
+                maxTokens,
+                systemPromptPreset,
+                customSystemPrompt,
+                mentorEngine: parsed.mentorEngine ? { ...unified, ...parsed.mentorEngine } : unified,
+                buildEngine: parsed.buildEngine ? { ...unified, ...parsed.buildEngine } : unified,
               };
               break;
             } catch {}
@@ -365,10 +393,31 @@ export function createServer(port: number = 7860): Promise<Server> {
           return;
         }
         fs.mkdirSync(aiConfigDir, { recursive: true });
-        const { mentorEngine, buildEngine } = req.body || {};
+        const body = req.body || {};
+        const base = defaultAIConfig();
+
+        const providerId = body.providerId || body.mentorEngine?.providerId || base.providerId;
+        const baseUrl = body.baseUrl || body.mentorEngine?.baseUrl || base.baseUrl;
+        const apiKey = body.apiKey !== undefined ? body.apiKey : (body.mentorEngine?.apiKey || '');
+        const model = body.model || body.mentorEngine?.model || base.model;
+        const temperature = body.temperature ?? base.temperature;
+        const maxTokens = body.maxTokens ?? base.maxTokens;
+        const systemPromptPreset = body.systemPromptPreset || base.systemPromptPreset;
+        const customSystemPrompt = body.customSystemPrompt || '';
+
+        const unifiedEngine = { providerId, baseUrl, apiKey, model };
+
         const merged = {
-          mentorEngine: { ...defaultDualConfig().mentorEngine, ...(mentorEngine || {}) },
-          buildEngine: { ...defaultDualConfig().buildEngine, ...(buildEngine || {}) },
+          providerId,
+          baseUrl,
+          apiKey,
+          model,
+          temperature,
+          maxTokens,
+          systemPromptPreset,
+          customSystemPrompt,
+          mentorEngine: body.mentorEngine ? { ...unifiedEngine, ...body.mentorEngine } : unifiedEngine,
+          buildEngine: body.buildEngine ? { ...unifiedEngine, ...body.buildEngine } : unifiedEngine,
           updatedAt: new Date().toISOString(),
         };
         fs.writeFileSync(getAiConfigFile(user.id), JSON.stringify(merged, null, 2), 'utf-8');
@@ -1430,8 +1479,8 @@ export function createServer(port: number = 7860): Promise<Server> {
         }
         fs.writeFileSync(annotationsFile, JSON.stringify(list, null, 2), 'utf-8');
 
-        let md = '# 📝 我的 Pwn 学习批注与疑问清单 (实时同步)\n\n';
-        md += '> 💡 **说明**：你在 Web 端对讲义任何划词产生的批注和疑问都会自动同步于此。在 Antigravity 聊天中只要呼叫 Gemini，即可一键解析你划出的全部疑问！\n\n';
+        let md = '# 我的学习批注与疑问清单 (实时同步)\n\n';
+        md += '> **说明**：你在 Web 端对讲义任何划词产生的批注和疑问都会自动同步于此，支持通过 AI 导师一键解析！\n\n';
         md += `*最近更新时间：${new Date().toLocaleString('zh-CN')}*\n\n---\n\n`;
 
         if (list.length === 0) {
@@ -1444,11 +1493,11 @@ export function createServer(port: number = 7860): Promise<Server> {
             groups[title].push(item);
           }
           for (const [title, items] of Object.entries(groups)) {
-            md += `### 📌 【${title}】\n\n`;
+            md += `### 【${title}】\n\n`;
             items.forEach((it, idx) => {
               md += `#### 疑问 ${idx + 1}（${it.createdAt || ''}）\n`;
               md += `> **划选原文**：\n> \`\`\`text\n> ${it.selectedText}\n> \`\`\`\n\n`;
-              md += `❓ **我的问题/批注**：\n**${it.comment}**\n\n`;
+              md += `**我的问题/批注**：\n**${it.comment}**\n\n`;
               md += `---\n\n`;
             });
           }

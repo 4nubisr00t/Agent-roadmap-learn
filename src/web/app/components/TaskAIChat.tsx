@@ -141,7 +141,7 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
     if (!textToSend || isStreaming) return;
 
     const cfg: AISettingsState = loadMergedAISettings(currentUserId);
-    const engine = cfg.mentorEngine || {
+    const engine = {
       providerId: cfg.providerId,
       baseUrl: cfg.baseUrl,
       apiKey: cfg.apiKey,
@@ -156,7 +156,7 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
     if (!engine.apiKey && !isServerHosted && !isLocalModel) {
       const ok = await confirm({
         title: '尚未配置大模型密钥',
-        message: '当前伴学引擎未配置 API Key，也未命中服务端托管密钥，是否现在打开 AI 配置中心？',
+        message: '当前 AI 供应商未配置 API Key，也未命中服务端托管密钥，是否现在打开 AI 配置中心？',
         confirmText: '去配置',
       });
       if (ok) {
@@ -284,7 +284,7 @@ export const TaskAIChat: React.FC<TaskAIChatProps> = ({
     }
   };
 
-  const activeMentor = activeSettings.mentorEngine || activeSettings;
+  const activeMentor = activeSettings;
   const currentProviderBadge = (
     <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 truncate max-w-[165px]">
       {activeMentor.model || activeMentor.providerId}

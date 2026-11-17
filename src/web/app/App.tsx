@@ -277,7 +277,7 @@ const App: React.FC = () => {
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [isEditModalOpen, modalActiveTab, leftPaneTab, rightPaneTab, isDesktopSplit, editingTask?.description, activeLectureContent]);
+  }, [isEditModalOpen, modalActiveTab, leftPaneTab, rightPaneTab, isDesktopSplit, editingTask?.description, streamingLectureText]);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [taskFormError, setTaskFormError] = useState('');
   const [newTaskForm, setNewTaskForm] = useState({
@@ -1907,7 +1907,7 @@ const App: React.FC = () => {
               type="button"
               onClick={() => setIsAISettingsOpen(true)}
               className="w-8 h-8 rounded-xl bg-zinc-950 border border-zinc-800 text-amber-400 flex items-center justify-center active:scale-90 transition-all"
-              title="双 AI 引擎设置"
+              title="AI 模型与网关配置"
             >
               <IconSettings className="w-4 h-4" />
             </button>
@@ -2412,20 +2412,15 @@ const App: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsAISettingsOpen(true)}
-            title="点击切换或配置双 AI 引擎（建树拆书引擎 / 伴学精讲引擎）"
+            title={`AI 模型与网关配置 (当前: ${aiSettings.model || 'deepseek-chat'})`}
             className="px-2.5 xl:px-3 py-1.5 text-xs font-bold bg-zinc-900/95 hover:bg-zinc-850 text-zinc-200 border border-zinc-800 hover:border-amber-500/50 rounded-xl shadow-sm transition-all flex items-center gap-1.5 active:scale-95 whitespace-nowrap"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-            <span className="hidden 2xl:inline-flex items-center gap-1 font-mono text-[11px] text-zinc-400">
-              <IconLightning className="w-3 h-3 text-emerald-400" />
-              <span>{(aiSettings.buildEngine?.model || 'deepseek-v4.1-flash').replace('deepseek-', 'ds-')}</span>
+            <IconAI className="w-3.5 h-3.5 text-amber-400" />
+            <span className="font-mono text-[11px] text-amber-300 truncate max-w-[140px] sm:max-w-[200px]">
+              {aiSettings.model || 'deepseek-chat'}
             </span>
-            <span className="hidden 2xl:inline text-zinc-700">|</span>
-            <span className="hidden lg:inline-flex items-center gap-1 font-mono text-[11px] text-amber-300">
-              <IconDiamond className="w-3 h-3 text-amber-400" />
-              <span>{aiSettings.mentorEngine?.model || aiSettings.model || 'gemini-3.8-flash'}</span>
-            </span>
-            <IconSettings className="w-3.5 h-3.5 text-amber-400/90" />
+            <IconSettings className="w-3.5 h-3.5 text-zinc-400 hover:text-amber-400 transition-colors" />
           </button>
 
           {currentUser ? (
@@ -3483,7 +3478,7 @@ const App: React.FC = () => {
                             <div className="space-y-1">
                               <h3 className="text-base font-black text-zinc-100">该学习节点已就绪，等待唤醒导师精讲</h3>
                               <p className="text-xs text-zinc-400 max-w-md mx-auto">
-                                按需解锁，拒绝无谓 Token 消耗！点击下方按钮，{aiSettings.mentorEngine?.model || 'Gemini 3.8 Flash'} 导师将读取本章原书切片并实时流式生成深度讲义与随堂自测。
+                                按需解锁，拒绝无谓 Token 消耗！点击下方按钮，{aiSettings.model || 'AI'} 导师将读取本章原书切片并实时流式生成深度讲义与随堂自测。
                               </p>
                             </div>
                             <button
