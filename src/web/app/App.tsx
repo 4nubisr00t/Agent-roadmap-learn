@@ -269,13 +269,15 @@ const App: React.FC = () => {
       isEditModalOpen &&
       (modalActiveTab === 'courseware' ||
         modalActiveTab === 'annotations' ||
-        (isDesktopSplit && (leftPaneTab === 'courseware' || rightPaneTab === 'annotations')))
+        modalActiveTab === 'notes' ||
+        (isDesktopSplit && (leftPaneTab === 'courseware' || rightPaneTab === 'annotations' || leftPaneTab === 'notes')))
     ) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         triggerMermaidRender();
-      }, 100);
+      }, 150);
+      return () => clearTimeout(timer);
     }
-  }, [isEditModalOpen, modalActiveTab, leftPaneTab, rightPaneTab, isDesktopSplit, editingTask?.description]);
+  }, [isEditModalOpen, modalActiveTab, leftPaneTab, rightPaneTab, isDesktopSplit, editingTask?.description, activeLectureContent]);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [taskFormError, setTaskFormError] = useState('');
   const [newTaskForm, setNewTaskForm] = useState({
